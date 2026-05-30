@@ -983,19 +983,40 @@ async function handleAdmin(sender, msg, low) {
     return true;
   }
 
-  if (low === 'listmember') {
-    let m = '👥 *Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + '):*\n' + GARIS_TEBAL + '\n';
-    if (MEMBERS.length === 0) {
-      m += '_(belum ada member terdaftar)_\n';
-    } else {
-      MEMBERS.forEach(function(n, i) {
-        m += (i + 1) + '. ' + n + '\n   👤 ' + (getNama(n) || '(belum ada nama)') + '\n';
-      });
+    if (low === 'listmember') {
+    try {
+      log.info('ADMIN', 'Listmember dipanggil oleh ' + sender);
+      log.info('ADMIN', 'MEMBERS array: ' + JSON.stringify(MEMBERS));
+      log.info('ADMIN', 'KONTAK keys: ' + Object.keys(KONTAK).length);
+      
+      let m = '*Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')*\n';
+      m += '------------------\n';
+      
+      if (MEMBERS.length === 0) {
+        m += '(belum ada member terdaftar)\n';
+      } else {
+        for (let i = 0; i < MEMBERS.length; i++) {
+          const nomor = MEMBERS[i];
+          const nama  = KONTAK[nomor] || '(belum ada nama)';
+          m += (i + 1) + '. ' + nomor + '\n';
+          m += '   ' + nama + '\n';
+        }
+      }
+      
+      m += '------------------\n';
+      m += 'Admin: ' + CONFIG.adminNumber + '\n';
+      m += 'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length) + ' perangkat';
+      
+      log.info('ADMIN', 'Listmember msg length: ' + m.length);
+      
+      const sukses = await kirimWA(sender, m);
+      log.info('ADMIN', 'Listmember kirim status: ' + sukses);
+    } catch (e) {
+      log.error('ADMIN', 'Listmember error', e.message);
+      await kirimWA(sender, 'Error listmember: ' + e.message);
     }
-    m += '\n👑 Admin: ' + CONFIG.adminNumber;
-    m += '\n\n📊 Slot tersisa: *' + (CONFIG.maxMember - MEMBERS.length) + '* perangkat';
-    await kirimWA(sender, m);
     return true;
+  }
   }
 
   if (low.startsWith('namakontak ')) {
