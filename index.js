@@ -1026,6 +1026,9 @@ app.post('/webhook', async function(req, res) {
     const event = body.event || '';
     const payload = body.payload || body;
     
+    // DEBUG: log payload mentah
+    log.info('DEBUG', 'RAW: ' + JSON.stringify(body).substring(0, 500));
+    
     if (event && event !== 'message' && event !== 'message.any') {
       log.info('WEBHOOK', 'Skip event: ' + event);
       return;
@@ -1050,23 +1053,68 @@ app.post('/webhook', async function(req, res) {
       return;
     }
     
-    let message = '';
+        let message = '';
     let buttonResponse = null;
     let listResponse = null;
     let mediaUrl = null;
     
+    // Cek berbagai format pesan WAHA
+    // 1. Button response
     if (payload.selectedButtonId) {
       buttonResponse = payload.selectedButtonId;
       message = payload.body || '';
-    } else if (payload.listResponse && payload.listResponse.singleSelectReply) {
+    }
+    // 2. List response  
+    else if (payload.listResponse && payload.listResponse.singleSelectReply) {
       listResponse = payload.listResponse.singleSelectReply.selectedRowId;
       message = payload.body || '';
-    } else if (payload.body) {
+    }
+    // 3. Quoted message dengan selectedId
+    else if (payload._data && payload._data.selectedButtonId) {
+      buttonResponse = payload._data.selectedButtonId;
+      message = payload.body || '';
+    }
+    else if (payload._data && payload._data.selectedRowId) {
+      listResponse = payload._data.selectedRowId;
+      message = payload.body || '';
+    }
+    // 4. Text di body field
+    else if (typeof payload.body === 'string' && payload.body.length > 0) {
       message = payload.body;
-    } else if (payload.text) {
+    }
+    // 5. Text di text field
+    else if (typeof payload.text === 'string' && payload.text.length > 0) {
       message = payload.text;
-    } else if (payload.message && payload.message.text) {
+    }
+    // 6. Text di message.text
+    else if (payload.message && typeof payload.message.text === 'string') {
       message = payload.message.text;
+    }
+    // 7. Text di message.conversation (Baileys format)
+    else if (payload.message && payload.message.conversation) {
+      message = payload.message.conversation;
+    }
+    // 8. Text di message.extendedTextMessage.text
+    else if (payload.message && payload.message.extendedTextMessage && payload.message.extendedTextMessage.text) {
+      message = payload.message.extendedTextMessage.text;
+    }
+    // 9. Caption (untuk image dengan teks)
+    else if (payload.caption) {
+      message = payload.caption;
+    }
+    // 10. Body di nested
+    else if (payload.body && typeof payload.body === 'object' && payload.body.text) {
+      message = payload.body.text;
+    }
+    
+    // Debug: kalau masih kosong, log semua field yang ada
+    if (!message && !buttonResponse && !listResponse) {
+      log.warn('WEBHOOK', 'Pesan kosong, payload keys: ' + Object.keys(payload).join(','));
+      log.warn('WEBHOOK', 'Sample payload: ' + JSON.stringify(payload).substring(0, 300));
+    }
+    
+    if (payload.hasMedia || payload.mediaUrl || (payload.media && payload.media.url)) {
+      mediaUrl = payload.mediaUrl || (payload.media && payload.media.url);
     }
     
     if (payload.hasMedia || payload.mediaUrl || (payload.media && payload.media.url)) {
