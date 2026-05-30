@@ -1026,8 +1026,8 @@ app.post('/webhook', async function(req, res) {
     const event = body.event || '';
     const payload = body.payload || body;
     
-    // DEBUG: log payload mentah
-    log.info('DEBUG', 'RAW: ' + JSON.stringify(body).substring(0, 500));
+    // DEBUG payload
+    log.info('DEBUG', 'Event: ' + event + ' | From: ' + (payload.from || 'N/A') + ' | Body: ' + (payload.body || 'N/A').substring(0, 50));
     
     if (event && event !== 'message' && event !== 'message.any') {
       log.info('WEBHOOK', 'Skip event: ' + event);
@@ -1037,84 +1037,58 @@ app.post('/webhook', async function(req, res) {
     if (payload.fromMe === true) return;
     
     const senderRaw = payload.from || payload.chatId || payload.sender || '';
-    const sender = fromChatId(senderRaw);
     
-    // Skip pesan grup, broadcast, dan @lid
-    if (senderRaw.includes('@g.us') || 
-        senderRaw.includes('@broadcast') || 
-        senderRaw.includes('@lid') ||
-        senderRaw.includes('-')) {
-      log.info('WEBHOOK', 'Skip non-personal: ' + senderRaw);
+    // Skip grup & broadcast saja
+    if (senderRaw.includes('@g.us') || senderRaw.includes('@broadcast')) {
+      log.info('WEBHOOK', 'Skip grup/broadcast');
       return;
+    }
+    
+    // Tentukan sender (handle @lid → mapping)
+    let sender;
+    if (senderRaw.includes('@lid')) {
+      // Coba ambil nomor real dari field author/participant
+      let realNum = null;
+      if (payload.author)      realNum = fromChatId(payload.author);
+      else if (payload.participant) realNum = fromChatId(payload.participant);
+      
+      if (realNum && /^628[0-9]{8,12}$/.test(realNum)) {
+        sender = realNum;
+        log.info('WEBHOOK', '@lid → ' + sender);
+      } else {
+        // Fallback: pakai admin number (asumsi admin test)
+        sender = CONFIG.adminNumber;
+        log.info('WEBHOOK', '@lid → admin (fallback): ' + sender);
+      }
+    } else {
+      sender = fromChatId(senderRaw);
     }
     
     if (!sender || !/^[0-9]+$/.test(sender)) {
-      log.info('WEBHOOK', 'Skip nomor invalid: ' + sender);
+      log.warn('WEBHOOK', 'Sender invalid: ' + sender);
       return;
     }
     
-        let message = '';
+    // Parse message
+    let message = '';
     let buttonResponse = null;
     let listResponse = null;
     let mediaUrl = null;
     
-    // Cek berbagai format pesan WAHA
-    // 1. Button response
     if (payload.selectedButtonId) {
       buttonResponse = payload.selectedButtonId;
       message = payload.body || '';
-    }
-    // 2. List response  
-    else if (payload.listResponse && payload.listResponse.singleSelectReply) {
+    } else if (payload.listResponse && payload.listResponse.singleSelectReply) {
       listResponse = payload.listResponse.singleSelectReply.selectedRowId;
       message = payload.body || '';
-    }
-    // 3. Quoted message dengan selectedId
-    else if (payload._data && payload._data.selectedButtonId) {
-      buttonResponse = payload._data.selectedButtonId;
-      message = payload.body || '';
-    }
-    else if (payload._data && payload._data.selectedRowId) {
-      listResponse = payload._data.selectedRowId;
-      message = payload.body || '';
-    }
-    // 4. Text di body field
-    else if (typeof payload.body === 'string' && payload.body.length > 0) {
+    } else if (typeof payload.body === 'string') {
       message = payload.body;
-    }
-    // 5. Text di text field
-    else if (typeof payload.text === 'string' && payload.text.length > 0) {
+    } else if (typeof payload.text === 'string') {
       message = payload.text;
-    }
-    // 6. Text di message.text
-    else if (payload.message && typeof payload.message.text === 'string') {
-      message = payload.message.text;
-    }
-    // 7. Text di message.conversation (Baileys format)
-    else if (payload.message && payload.message.conversation) {
+    } else if (payload.message && payload.message.conversation) {
       message = payload.message.conversation;
-    }
-    // 8. Text di message.extendedTextMessage.text
-    else if (payload.message && payload.message.extendedTextMessage && payload.message.extendedTextMessage.text) {
-      message = payload.message.extendedTextMessage.text;
-    }
-    // 9. Caption (untuk image dengan teks)
-    else if (payload.caption) {
-      message = payload.caption;
-    }
-    // 10. Body di nested
-    else if (payload.body && typeof payload.body === 'object' && payload.body.text) {
-      message = payload.body.text;
-    }
-    
-    // Debug: kalau masih kosong, log semua field yang ada
-    if (!message && !buttonResponse && !listResponse) {
-      log.warn('WEBHOOK', 'Pesan kosong, payload keys: ' + Object.keys(payload).join(','));
-      log.warn('WEBHOOK', 'Sample payload: ' + JSON.stringify(payload).substring(0, 300));
-    }
-    
-    if (payload.hasMedia || payload.mediaUrl || (payload.media && payload.media.url)) {
-      mediaUrl = payload.mediaUrl || (payload.media && payload.media.url);
+    } else if (payload.message && payload.message.text) {
+      message = payload.message.text;
     }
     
     if (payload.hasMedia || payload.mediaUrl || (payload.media && payload.media.url)) {
@@ -1124,7 +1098,7 @@ app.post('/webhook', async function(req, res) {
     const msg = (message || buttonResponse || listResponse || '').trim();
     const low = msg.toLowerCase();
     
-    log.info('WEBHOOK', sender + ' [' + (buttonResponse ? 'BTN' : listResponse ? 'LIST' : 'TEXT') + '] ' + msg.substring(0, 50));
+    log.info('WEBHOOK', sender + ' [' + (buttonResponse ? 'BTN' : listResponse ? 'LIST' : 'TEXT') + '] "' + msg.substring(0, 50) + '"');
 
     // ── SAPAAN PERTAMA ──
     if (!SUDAH_DISAPA[sender]) {
@@ -1157,8 +1131,8 @@ app.post('/webhook', async function(req, res) {
     // ── SAPAAN ──
     if (isSapaan(low)) {
       const nama = getNama(sender);
-      const s = nama ? 'Selamat ' + getWaktu() + ' juga, *' + nama + '*! 😊' : 'Selamat ' + getWaktu() + ' juga! 😊';
-      await kirimTeks(sender, s);
+      const sl = nama ? 'Selamat ' + getWaktu() + ' juga, *' + nama + '*! 😊' : 'Selamat ' + getWaktu() + ' juga! 😊';
+      await kirimTeks(sender, sl);
       await tunggu(500);
       await tampilkanMenuUtama(sender);
       return;
@@ -1187,19 +1161,19 @@ app.post('/webhook', async function(req, res) {
     if (!listResponse && !buttonResponse && msg) {
       if (s.mode === 'admin_menu') {
         const adminId = parsePilihanAdmin(low);
-        if (adminId) listResponse = adminId;
+        if (adminId) { listResponse = adminId; log.info('PARSER', 'admin: ' + low + ' → ' + adminId); }
       }
       else if ((s.mode === 'cari' && !s.tokoKode) || (s.menu && s.menu !== 3 && !s.toko)) {
         const tokoId = parsePilihanToko(low);
-        if (tokoId) listResponse = tokoId;
+        if (tokoId) { listResponse = tokoId; log.info('PARSER', 'toko: ' + low + ' → ' + tokoId); }
       }
       else if (s.menu && (s.toko || s.menu === 3) && (s.kemarin === undefined || s.kemarin === null)) {
         const hariId = parsePilihanHari(low);
-        if (hariId) buttonResponse = hariId;
+        if (hariId) { buttonResponse = hariId; log.info('PARSER', 'hari: ' + low + ' → ' + hariId); }
       }
       else if (!s.menu && !s.mode) {
         const menuId = parsePilihanMenu(low);
-        if (menuId) listResponse = menuId;
+        if (menuId) { listResponse = menuId; log.info('PARSER', 'menu: ' + low + ' → ' + menuId); }
       }
     }
 
@@ -1315,7 +1289,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── CARI LANGSUNG dengan "cari" prefix ──
+    // ── CARI LANGSUNG ──
     if (low.startsWith('cari ')) {
       const kw = msg.substring(5).trim();
       if (!kw) { await kirimTeks(sender, 'Contoh: cari dandang eagle 20'); return; }
@@ -1331,7 +1305,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── INPUT LAPORAN (foto / teks) ──
+    // ── INPUT LAPORAN ──
     if (s.menu && (s.kemarin !== undefined && s.kemarin !== null)) {
       const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
       let laporan = '';
@@ -1365,15 +1339,11 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── DEFAULT: tampilkan menu ──
+    // ── DEFAULT ──
     await tampilkanMenuUtama(sender);
 
   } catch (err) {
     log.error('WEBHOOK', 'Unhandled', err.message);
-    try {
-      const sender = req.body && req.body.payload ? fromChatId(req.body.payload.from || '') : '';
-      if (sender) await kirimTeks(sender, '⚠️ Terjadi kesalahan. Ketik *menu* untuk mulai ulang.');
-    } catch (e) {}
   }
 });
 
