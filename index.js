@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 3.3 - Smart Sapaan + Motivasi + Format CP
+//   Versi 3.4 - Smart Sapaan + Format Khusus Semua Toko
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -59,18 +59,11 @@ if (!CONFIG.fonnteToken || !CONFIG.geminiKey) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   2. EMOJI ANGKA
+//   2. EMOJI ANGKA & DATA TOKO
 // ════════════════════════════════════════════════════════════════
 
 const EMOJI_NUM = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-function emojiNum(n) {
-  if (n >= 0 && n <= 10) return EMOJI_NUM[n];
-  return String(n);
-}
-
-// ════════════════════════════════════════════════════════════════
-//   3. DATA TOKO
-// ════════════════════════════════════════════════════════════════
+function emojiNum(n) { return (n >= 0 && n <= 10) ? EMOJI_NUM[n] : String(n); }
 
 const TOKO_LIST = [
   { kode: 'nk',     nama: 'Nasional Kitchen',          alias: ['nk', 'nasional', 'kitchen'] },
@@ -108,13 +101,10 @@ const DEFAULT_KONTAK = {
   '6285829278962': 'Admin'
 };
 
-const ADMIN_COMMANDS = [
-  'daftar', 'hapus', 'listmember', 'namakontak', 'hapuskontak',
-  'listkontak', 'reload', 'info'
-];
+const ADMIN_COMMANDS = ['daftar','hapus','listmember','namakontak','hapuskontak','listkontak','reload','info'];
 
 // ════════════════════════════════════════════════════════════════
-//   4. LOGGER
+//   3. LOGGER & UTILS
 // ════════════════════════════════════════════════════════════════
 
 function timestamp() {
@@ -128,15 +118,9 @@ const log = {
   error: function(ctx, msg, data) {
     const fullMsg = '[' + timestamp() + '] [ERROR] [' + ctx + '] ' + msg;
     console.error(fullMsg, data || '');
-    try {
-      fs.appendFileSync(CONFIG.paths.logs, fullMsg + (data ? ' | ' + JSON.stringify(data) : '') + '\n');
-    } catch (e) {}
+    try { fs.appendFileSync(CONFIG.paths.logs, fullMsg + (data ? ' | ' + JSON.stringify(data) : '') + '\n'); } catch (e) {}
   },
 };
-
-// ════════════════════════════════════════════════════════════════
-//   5. UTILS
-// ════════════════════════════════════════════════════════════════
 
 function getWaktu() {
   const j = new Date(Date.now() + 8 * 3600000).getUTCHours();
@@ -153,21 +137,20 @@ function getTanggal(kemarin) {
 }
 
 function formatRp(n, prefix, fallback) {
-  prefix   = prefix   || 'Rp';
+  prefix = prefix || 'Rp';
   fallback = fallback || prefix + ' -';
-  const v  = parseFloat(n) || 0;
+  const v = parseFloat(n) || 0;
   if (v === 0) return fallback;
   return prefix + ' ' + v.toLocaleString('id-ID');
 }
 
-const fRp  = function(n) { return formatRp(n, 'Rp',  'Rp -');  };
-const fRpP = function(n) { return formatRp(n, 'Rp',  'Rp 0');  };
-
+const fRp  = function(n) { return formatRp(n, 'Rp',  'Rp -'); };
+const fRpP = function(n) { return formatRp(n, 'Rp',  'Rp 0'); };
 const GARIS_TEBAL = '━━━━━━━━━━━━━━━━━━';
 const GARIS_TIPIS = '──────────────────';
 
 // ════════════════════════════════════════════════════════════════
-//   6. STORAGE
+//   4. STORAGE
 // ════════════════════════════════════════════════════════════════
 
 function loadJSON(filePath, defaultValue) {
@@ -178,10 +161,8 @@ function loadJSON(filePath, defaultValue) {
 }
 
 function saveJSON(filePath, data) {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    return true;
-  } catch (e) { log.error('STORAGE', 'Gagal save', e.message); return false; }
+  try { fs.writeFileSync(filePath, JSON.stringify(data, null, 2)); return true; }
+  catch (e) { log.error('STORAGE', 'Gagal save', e.message); return false; }
 }
 
 let MEMBERS      = loadJSON(CONFIG.paths.members, DEFAULT_MEMBERS.slice());
@@ -228,18 +209,12 @@ function hapusKontak(nomor) {
 }
 
 const TIMEOUT_MS = CONFIG.sesiTimeoutMenit * 60 * 1000;
-
 function getSesi(nomor) {
   if (!SESI[nomor]) SESI[nomor] = {};
   SESI[nomor]._lastActive = Date.now();
   return SESI[nomor];
 }
-
-function resetSesi(nomor) {
-  SESI[nomor] = { _lastActive: Date.now() };
-  saveJSON(CONFIG.paths.sesi, SESI);
-}
-
+function resetSesi(nomor) { SESI[nomor] = { _lastActive: Date.now() }; saveJSON(CONFIG.paths.sesi, SESI); }
 function updateSesi(nomor, data) {
   if (!SESI[nomor]) SESI[nomor] = {};
   Object.assign(SESI[nomor], data, { _lastActive: Date.now() });
@@ -256,7 +231,7 @@ setInterval(function() {
 }, 5 * 60 * 1000);
 
 // ════════════════════════════════════════════════════════════════
-//   7. EXCEL
+//   5. EXCEL
 // ════════════════════════════════════════════════════════════════
 
 let DATA_BARANG = [];
@@ -330,7 +305,7 @@ function saveExcel() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   8. SMART SEARCH
+//   6. SMART SEARCH
 // ════════════════════════════════════════════════════════════════
 
 function levenshtein(a, b) {
@@ -348,9 +323,7 @@ function levenshtein(a, b) {
   return matrix[b.length][a.length];
 }
 
-function bersihkanTeks(str) {
-  return String(str).toUpperCase().replace(/[^A-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-}
+function bersihkanTeks(str) { return String(str).toUpperCase().replace(/[^A-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
 
 function kataMirip(kata, target) {
   if (kata === target) return true;
@@ -443,9 +416,8 @@ function updateStok(kode, tokoKode, jumlah) {
 }
 
 loadExcel();
-
 // ════════════════════════════════════════════════════════════════
-//   9. KIRIM WHATSAPP (FONNTE)
+//   7. KIRIM WHATSAPP (FONNTE)
 // ════════════════════════════════════════════════════════════════
 
 function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
@@ -453,26 +425,20 @@ function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 async function kirimWA(target, message, retry) {
   retry = retry || 0;
   try {
-    await axios.post(
-      CONFIG.fonnteUrl,
-      { target: target, message: message },
-      { headers: { Authorization: CONFIG.fonnteToken }, timeout: 10000 }
-    );
+    await axios.post(CONFIG.fonnteUrl, { target: target, message: message },
+      { headers: { Authorization: CONFIG.fonnteToken }, timeout: 10000 });
     log.info('FONNTE', 'OK ke ' + target);
     return true;
   } catch (err) {
     log.warn('FONNTE', 'Gagal attempt ' + (retry + 1));
-    if (retry < CONFIG.maxRetry - 1) {
-      await tunggu(CONFIG.retryDelay);
-      return kirimWA(target, message, retry + 1);
-    }
+    if (retry < CONFIG.maxRetry - 1) { await tunggu(CONFIG.retryDelay); return kirimWA(target, message, retry + 1); }
     log.error('FONNTE', 'GAGAL TOTAL', err.message);
     return false;
   }
 }
 
 // ════════════════════════════════════════════════════════════════
-//   10. GEMINI AI
+//   8. GEMINI AI
 // ════════════════════════════════════════════════════════════════
 
 async function analisaGambar(imageUrl, prompt) {
@@ -480,12 +446,7 @@ async function analisaGambar(imageUrl, prompt) {
   const mimeType  = imgResp.headers['content-type'] || 'image/jpeg';
   const imageData = Buffer.from(imgResp.data).toString('base64');
   const resp = await axios.post(geminiUrl(), {
-    contents: [{
-      parts: [
-        { inline_data: { mime_type: mimeType, data: imageData } },
-        { text: prompt },
-      ],
-    }],
+    contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: imageData } }, { text: prompt }] }],
   }, { timeout: 30000 });
   return resp.data.candidates[0].content.parts[0].text || '';
 }
@@ -494,10 +455,14 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
   const fmt = ' Format WhatsApp dengan emoji. Format rupiah Rp X.XXX.XXX.';
   if (menuType === 1) {
     if (tokoKode === 'cp') {
-      return 'Baca data penjualan toko Central Perabot tanggal ' + tanggal + '. ' +
-        'Buat laporan dengan format: 4 kassa (Kassa 1-4 dengan nama kasir), total keseluruhan, ' +
-        'metode pembayaran (Tunai/Debit/Credit), jenis penjualan (Ecer/Grosir), ' +
-        'laporan kasir promo (total + metode bayar), laporan parkir (komputer + stor luar + total).' + fmt;
+      return 'Baca data penjualan toko Central Perabot tanggal ' + tanggal + '. Buat laporan dengan format: 4 kassa (Kassa 1-4 dengan nama kasir), total keseluruhan, metode pembayaran (Tunai/Debit/Credit), jenis penjualan (Ecer/Grosir), laporan kasir promo (total + metode bayar), laporan parkir (komputer + stor luar + total).' + fmt;
+    }
+    if (tokoKode === 'nk') {
+      return 'Baca data penjualan toko Nasional Kitchen tanggal ' + tanggal + '. Buat laporan dengan format: 2 kassa (Kassa 1-2), total penjualan keseluruhan, metode pembayaran (Tunai/Debit/Credit), jenis penjualan (Ecer/Grosir). Format rupiah: Rp. X.XXX.XXX (pakai titik). Judul: "Laporan Penjualan Toko Nasional Kitchen Periode [tanggal]".' + fmt;
+    }
+    if (tokoKode === 'tdm' || tokoKode === 'oesapa' || tokoKode === 'kefa') {
+      const tNama = tokoKode === 'tdm' ? 'Perabot Mama TDM' : tokoKode === 'oesapa' ? 'Perabot Mama Oesapa' : 'Perabot Mamaku Kefamenanu';
+      return 'Baca data penjualan toko ' + tNama + ' tanggal ' + tanggal + '. Buat laporan dengan format: 2-3 kassa, total penjualan keseluruhan, metode pembayaran (Tunai/Debit/Credit) SAJA tanpa Ecer/Grosir. Format rupiah: Rp. X.XXX.XXX (pakai titik). Judul: "Laporan Penjualan Toko ' + tNama + ' Periode [tanggal]".' + fmt;
     }
     return 'Baca data penjualan toko "' + namaToko + '" tanggal ' + tanggal + '. Buat laporan: kassa, total, metode bayar, jenis penjualan.' + fmt;
   }
@@ -505,13 +470,12 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
   if (menuType === 3) return 'Baca data marketplace tanggal ' + tanggal + '. Buat laporan: per toko, per channel, metode bayar.' + fmt;
   return 'Buat laporan rapi.' + fmt;
 }
+
 // ════════════════════════════════════════════════════════════════
-//   11. SAPAAN PINTAR & MOTIVASI
+//   9. SAPAAN PINTAR & MOTIVASI
 // ════════════════════════════════════════════════════════════════
 
-// Mapping sapaan → balasan yang sesuai
 const SAPAAN_MAP = {
-  // Sapaan kasual
   'halo':     { kategori: 'kasual', balasan: ['Halo', 'Haloo', 'Hai juga', 'Haaai', 'Halooo'] },
   'hai':      { kategori: 'kasual', balasan: ['Hai', 'Haiii', 'Halo juga', 'Hai hai', 'Hai!'] },
   'hi':       { kategori: 'kasual', balasan: ['Hi', 'Hi there', 'Hiii', 'Hi juga', 'Haii'] },
@@ -523,38 +487,26 @@ const SAPAAN_MAP = {
   'yo':       { kategori: 'kasual', balasan: ['Yo', 'Yo bro', 'Yoyoyo', 'Yo juga'] },
   'p':        { kategori: 'kasual', balasan: ['p juga', 'Halo', 'Hai', 'Iya?'] },
   'ping':     { kategori: 'kasual', balasan: ['Pong! 🏓', 'Pong 🏓', 'Pong juga'] },
-  
-  // Sapaan berdasarkan waktu
   'pagi':     { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi', 'Pagi juga', 'Pagiii', 'Pagi yang cerah'] },
   'siang':    { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang', 'Siang juga', 'Siaaang'] },
   'sore':     { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore', 'Sore juga', 'Soreee'] },
   'malam':    { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam', 'Malam juga', 'Malaaam'] },
-  
-  // Selamat + waktu
   'selamat pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi juga', 'Pagi yang indah', 'Selamat pagi'] },
   'selamat siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang juga', 'Siang yang cerah', 'Selamat siang'] },
   'selamat sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore juga', 'Sore yang menyenangkan', 'Selamat sore'] },
   'selamat malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam juga', 'Malam yang tenang', 'Selamat malam'] },
-  
-  // Singkatan/slang
   'met pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Met pagi juga', 'Selamat pagi', 'Pagi!'] },
   'met siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Met siang juga', 'Selamat siang', 'Siang!'] },
   'met sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Met sore juga', 'Selamat sore', 'Sore!'] },
   'met malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Met malam juga', 'Selamat malam', 'Malam!'] },
-  
-  // Islami
   'assalamualaikum':       { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam', 'Waalaikumsalam wr. wb.'] },
   'assalamu':              { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam'] },
   'assalamualaikum wr wb': { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam wr. wb.'] },
   'salam':                 { kategori: 'islami', balasan: ['Salam juga', 'Salam sejahtera', 'Waalaikumsalam'] },
-  
-  // English
   'good morning':   { kategori: 'english', waktu: 'Pagi',  balasan: ['Good morning', 'Morning!', 'Good morning to you'] },
   'good afternoon': { kategori: 'english', waktu: 'Siang', balasan: ['Good afternoon', 'Afternoon!', 'Good afternoon to you'] },
   'good evening':   { kategori: 'english', waktu: 'Sore',  balasan: ['Good evening', 'Evening!', 'Good evening to you'] },
   'good night':     { kategori: 'english', waktu: 'Malam', balasan: ['Good night', 'Have a nice dream', 'Sleep well'] },
-  
-  // Sopan
   'permisi':     { kategori: 'sopan', balasan: ['Iya, silakan', 'Iya, ada yang bisa dibantu?', 'Ya, silakan'] },
   'maaf':        { kategori: 'sopan', balasan: ['Iya, tidak apa-apa', 'Iya, ada yang bisa dibantu?', 'Iya, santai saja'] },
   'maaf ganggu': { kategori: 'sopan', balasan: ['Tidak mengganggu kok', 'Santai saja', 'Tidak apa-apa, silakan'] },
@@ -562,7 +514,6 @@ const SAPAAN_MAP = {
 
 const KATA_SAPAAN_LIST = Object.keys(SAPAAN_MAP);
 
-// Kalimat motivasi random
 const KALIMAT_MOTIVASI = [
   '✨ _Hari yang baru, semangat yang baru!_ 💪',
   '🌟 _Setiap hari adalah kesempatan untuk jadi lebih baik!_ 🚀',
@@ -591,7 +542,6 @@ const KALIMAT_MOTIVASI = [
   '🎵 _Hidup ini lagu, mainkan dengan indah!_ 🎶',
 ];
 
-// Tanya kabar random
 const TANYA_KABAR = [
   'Bagaimana kabarnya hari ini? 😊',
   'Apa kabar? Semoga sehat selalu ya 💪',
@@ -606,15 +556,10 @@ const TANYA_KABAR = [
 ];
 
 function cocokKata(low, kata) {
-  return low === kata 
-    || low.startsWith(kata + ' ') 
-    || low.startsWith(kata + ',') 
-    || low.startsWith(kata + '!')
-    || low.startsWith(kata + '.')
-    || low.endsWith(' ' + kata);
+  return low === kata || low.startsWith(kata + ' ') || low.startsWith(kata + ',') ||
+    low.startsWith(kata + '!') || low.startsWith(kata + '.') || low.endsWith(' ' + kata);
 }
 
-// Return nama kata sapaan kalau cocok, null kalau tidak
 function isSapaan(low) {
   const sorted = KATA_SAPAAN_LIST.slice().sort(function(a, b) { return b.length - a.length; });
   for (let i = 0; i < sorted.length; i++) {
@@ -623,46 +568,24 @@ function isSapaan(low) {
   return null;
 }
 
-const KATA_TERIMAKASIH = [
-  'terima kasih','terimakasih','makasih','thanks','thank you',
-  'thx','tq','ty','tengkyu','mksh','trims','trimakasih',
-];
-
-function isTerimakasih(low) {
-  return KATA_TERIMAKASIH.some(function(k) { return cocokKata(low, k); });
-}
+const KATA_TERIMAKASIH = ['terima kasih','terimakasih','makasih','thanks','thank you','thx','tq','ty','tengkyu','mksh','trims','trimakasih'];
+function isTerimakasih(low) { return KATA_TERIMAKASIH.some(function(k) { return cocokKata(low, k); }); }
 
 function balasSapaanPintar(sender, kataSapaan) {
   const nama  = getNama(sender);
   const waktu = getWaktu();
   const dataSapa = SAPAAN_MAP[kataSapaan];
-  
   if (!dataSapa) return (nama ? 'Halo, *' + nama + '*! 😊' : 'Halo! 😊');
-  
   const opsiBalasan = dataSapa.balasan;
   const pilihan = opsiBalasan[Math.floor(Math.random() * opsiBalasan.length)];
-  
   let respon = '';
-  
   if (dataSapa.kategori === 'waktu') {
-    if (dataSapa.waktu === waktu) {
-      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
-    } else {
-      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊\n_(Sekarang udah ' + waktu.toLowerCase() + ' loh)_';
-    }
-  } 
-  else if (dataSapa.kategori === 'islami') {
-    respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 🤲';
-  }
-  else if (dataSapa.kategori === 'english') {
-    respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
-  }
-  else if (dataSapa.kategori === 'sopan') {
-    respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 😊';
-  }
-  else {
-    respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
-  }
+    if (dataSapa.waktu === waktu) respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+    else respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊\n_(Sekarang udah ' + waktu.toLowerCase() + ' loh)_';
+  } else if (dataSapa.kategori === 'islami') respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 🤲';
+  else if (dataSapa.kategori === 'english') respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+  else if (dataSapa.kategori === 'sopan')   respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 😊';
+  else                                       respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
   return respon;
 }
 
@@ -671,29 +594,17 @@ function sapaanPertama(sender) {
   const waktu  = getWaktu();
   const motiv  = KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
   const kabar  = TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
-  const sambutan = [
-    'Selamat ' + waktu,
-    'Halo, selamat ' + waktu,
-    'Hai, selamat ' + waktu,
-    'Halo',
-    'Hai',
-  ];
+  const sambutan = ['Selamat ' + waktu, 'Halo, selamat ' + waktu, 'Hai, selamat ' + waktu, 'Halo', 'Hai'];
   const sapa = sambutan[Math.floor(Math.random() * sambutan.length)];
-  let pesan = sapa + (nama ? ', *' + nama + '*' : '') + '! 👋\n\n';
-  pesan += motiv + '\n\n';
-  pesan += kabar;
-  return pesan;
+  return sapa + (nama ? ', *' + nama + '*' : '') + '! 👋\n\n' + motiv + '\n\n' + kabar;
 }
 
 function sapaanBerikutnya(sender, kataSapaan) {
   const balasan = balasSapaanPintar(sender, kataSapaan);
   const rand = Math.random();
   let tambahan = '';
-  if (rand < 0.15) {
-    tambahan = '\n\n' + KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
-  } else if (rand < 0.30) {
-    tambahan = '\n\n' + TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
-  }
+  if (rand < 0.15) tambahan = '\n\n' + KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
+  else if (rand < 0.30) tambahan = '\n\n' + TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
   return balasan + tambahan;
 }
 
@@ -701,13 +612,9 @@ function balasTerimakasih(sender) {
   const nama = getNama(sender);
   const n = nama ? ', *' + nama + '*' : '';
   const opsi = [
-    'Sama-sama' + n + '! 😊',
-    'Dengan senang hati' + n + '! 😊',
-    'Tentu' + n + '! 😊',
-    'Iya, sama-sama' + n + '! 🙏',
-    'Senang bisa membantu' + n + '! ✨',
-    'You\'re welcome' + n + '! 😊',
-    'Yuk, kalau ada yang lain ketik *menu* ya' + n + '! 💪',
+    'Sama-sama' + n + '! 😊', 'Dengan senang hati' + n + '! 😊', 'Tentu' + n + '! 😊',
+    'Iya, sama-sama' + n + '! 🙏', 'Senang bisa membantu' + n + '! ✨',
+    'You\'re welcome' + n + '! 😊', 'Yuk, kalau ada yang lain ketik *menu* ya' + n + '! 💪',
   ];
   return opsi[Math.floor(Math.random() * opsi.length)];
 }
@@ -718,7 +625,7 @@ function isAdminCommand(low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. MENU FRIENDLY
+//   10. MENU FRIENDLY
 // ════════════════════════════════════════════════════════════════
 
 function getMenuUtama(nomor) {
@@ -727,8 +634,7 @@ function getMenuUtama(nomor) {
   let m = '╭━━━━━━━━━━━━━━━━━╮\n';
   m += '│  🤖 *BOT TOKO PERABOT*  │\n';
   m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += 'Halo ' + salam + '! 👋\n';
-  m += 'Silakan pilih menu:\n\n';
+  m += 'Halo ' + salam + '! 👋\nSilakan pilih menu:\n\n';
   m += '┌─────────────────────\n';
   m += '│ ' + emojiNum(1) + ' 📊 Laporan Penjualan\n';
   m += '│ ' + emojiNum(2) + ' 🏷️ Laporan Harga Barang\n';
@@ -736,9 +642,7 @@ function getMenuUtama(nomor) {
   if (isMember(nomor)) m += '│ ' + emojiNum(4) + ' 🔍 Cari Harga Barang\n';
   if (isAdmin(nomor))  m += '│ ' + emojiNum(9) + ' 👑 Menu Admin\n';
   m += '└─────────────────────\n\n';
-  m += '💬 *Cara pilih:*\n';
-  m += '   Ketik nomor (contoh: *1*)\n';
-  m += '   atau ketik nama menunya';
+  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n   atau ketik nama menunya';
   return m;
 }
 
@@ -748,33 +652,19 @@ function getMenuPilihToko(menuType) {
            : menuType === 2 ? 'LAPORAN HARGA BARANG'
            : menuType === 'cari' ? 'CARI HARGA BARANG'
            : 'LAPORAN MARKETPLACE';
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
-  m += '│  ' + ic + ' *' + jd + '*  │\n';
-  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 *Pilih Toko:*\n\n';
-  m += '┌─────────────────────\n';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ' + ic + ' *' + jd + '*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 *Pilih Toko:*\n\n┌─────────────────────\n';
   TOKO_LIST.forEach(function(t, i) { m += '│ ' + emojiNum(i + 1) + ' ' + t.nama + '\n'; });
-  m += '└─────────────────────\n\n';
-  m += '💬 Ketik nomor (1-5) atau nama toko\n';
-  m += '   contoh: *1* atau *nk*\n\n';
-  m += '🔙 Ketik *batal* untuk kembali';
+  m += '└─────────────────────\n\n💬 Ketik nomor (1-5) atau nama toko\n   contoh: *1* atau *nk*\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuPilihHari(namaToko) {
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
-  m += '│  🏦 *' + namaToko + '*  │\n';
-  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '📅 *Laporan untuk hari:*\n\n';
-  m += '┌─────────────────────\n';
-  m += '│ ' + emojiNum(1) + ' 📅 *HARI INI*\n';
-  m += '│    _(' + getTanggal(false) + ')_\n│\n';
-  m += '│ ' + emojiNum(2) + ' 📅 *KEMARIN*\n';
-  m += '│    _(' + getTanggal(true) + ')_\n';
-  m += '└─────────────────────\n\n';
-  m += '💬 Ketik *1* untuk hari ini\n';
-  m += '   atau *2* untuk kemarin\n\n';
-  m += '🔙 Ketik *batal* untuk kembali';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  🏦 *' + namaToko + '*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '📅 *Laporan untuk hari:*\n\n┌─────────────────────\n';
+  m += '│ ' + emojiNum(1) + ' 📅 *HARI INI*\n│    _(' + getTanggal(false) + ')_\n│\n';
+  m += '│ ' + emojiNum(2) + ' 📅 *KEMARIN*\n│    _(' + getTanggal(true) + ')_\n';
+  m += '└─────────────────────\n\n💬 Ketik *1* untuk hari ini\n   atau *2* untuk kemarin\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
@@ -784,21 +674,11 @@ function getMenuSiapInput(namaToko, kemarin, menuType, tokoKode) {
   let contoh = '';
   if (menuType === 1) {
     if (tokoKode === 'cp') {
-      contoh = 'k1 Yuni-Salsa 42345000\n' +
-               'k2 Nanda-Umi-Marselina 45213500\n' +
-               'k3 Febri-Jien-Tika 1979500\n' +
-               'k4 Delfi-Tirsa 51025500\n' +
-               'tunai 66619000\n' +
-               'debit 73944500\n' +
-               'kredit -\n' +
-               'ecer 105346500\n' +
-               'grosir 35217000\n' +
-               'promo 1675000\n' +
-               'promotunai 1675000\n' +
-               'promodebit -\n' +
-               'promokredit -\n' +
-               'parkirkomputer -\n' +
-               'parkirluar 369500';
+      contoh = 'k1 Yuni-Salsa 42345000\nk2 Nanda-Umi-Marselina 45213500\nk3 Febri-Jien-Tika 1979500\nk4 Delfi-Tirsa 51025500\ntunai 66619000\ndebit 73944500\nkredit -\necer 105346500\ngrosir 35217000\npromo 1675000\npromotunai 1675000\npromodebit -\npromokredit -\nparkirkomputer -\nparkirluar 369500';
+    } else if (tokoKode === 'nk') {
+      contoh = 'k1 29812000\nk2 11087000\ntunai 26326500\ndebit 14254500\nkredit 318000\necer 23298000\ngrosir 17601000';
+    } else if (tokoKode === 'tdm' || tokoKode === 'oesapa' || tokoKode === 'kefa') {
+      contoh = 'k1 15109000\nk2 17131500\ntunai 19094500\ndebit 13146000\nkredit -';
     } else {
       contoh = 'k1 29000000\nk2 11000000\ntunai 26000000\ndebit 14000000\necer 23000000\ngrosir 17000000';
     }
@@ -807,20 +687,12 @@ function getMenuSiapInput(namaToko, kemarin, menuType, tokoKode) {
   } else {
     contoh = 'oesapa 0\ntdm 0\ncentral 21061000\nwa 21061000\nshopee 0\ntiktok 0\ntokopedia 0\ntunai 304000\ndebit 20757000';
   }
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
-  m += '│  ✅ *SIAP INPUT*  │\n';
-  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 ' + namaToko + '\n';
-  m += '📅 ' + t + k + '\n\n';
-  m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '📤 *Pilih cara input:*\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
-  m += '📸 *OPSI 1: Kirim FOTO*\n';
-  m += '   Foto akan dibaca AI 🤖\n\n';
-  m += '⌨️ *OPSI 2: Ketik manual*\n';
-  m += '   Contoh format:\n\n';
-  m += '```' + contoh + '```\n\n';
-  if (tokoKode === 'cp') {
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
+  m += '━━━━━━━━━━━━━━━━━━\n📤 *Pilih cara input:*\n━━━━━━━━━━━━━━━━━━\n\n';
+  m += '📸 *OPSI 1: Kirim FOTO*\n   Foto akan dibaca AI 🤖\n\n';
+  m += '⌨️ *OPSI 2: Ketik manual*\n   Contoh format:\n\n```' + contoh + '```\n\n';
+  if (tokoKode === 'cp' || tokoKode === 'tdm' || tokoKode === 'oesapa' || tokoKode === 'kefa') {
     m += '💡 Pakai *-* untuk nilai kosong\n\n';
   }
   m += '🔙 Ketik *batal* untuk membatalkan';
@@ -828,11 +700,8 @@ function getMenuSiapInput(namaToko, kemarin, menuType, tokoKode) {
 }
 
 function getMenuAdmin() {
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
-  m += '│  👑 *MENU ADMIN*  │\n';
-  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🛠️ *Pilih aksi:*\n\n';
-  m += '┌─────────────────────\n';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  👑 *MENU ADMIN*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🛠️ *Pilih aksi:*\n\n┌─────────────────────\n';
   m += '│ ' + emojiNum(1) + ' 👥 List Member\n';
   m += '│ ' + emojiNum(2) + ' 📒 List Kontak\n';
   m += '│ ' + emojiNum(3) + ' ➕ Tambah Member\n';
@@ -841,43 +710,27 @@ function getMenuAdmin() {
   m += '│ ' + emojiNum(6) + ' 🗑️ Hapus Kontak\n';
   m += '│ ' + emojiNum(7) + ' 🔄 Reload Excel\n';
   m += '│ ' + emojiNum(8) + ' ℹ️ Info Sistem\n';
-  m += '└─────────────────────\n\n';
-  m += '💬 Ketik nomor (1-8)\n\n';
-  m += '🔙 Ketik *batal* untuk kembali';
+  m += '└─────────────────────\n\n💬 Ketik nomor (1-8)\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuSiapCari(namaToko) {
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
-  m += '│  🔍 *CARI BARANG*  │\n';
-  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 ' + namaToko + '\n\n';
-  m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '⌨️ *Ketik nama atau kode:*\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
-  m += '💡 *Contoh:*\n';
-  m += '   • _dandang eagle 20_\n';
-  m += '   • _NN00001_\n';
-  m += '   • _golden sunkist_\n\n';
-  m += '✨ Bot otomatis koreksi typo!\n\n';
-  m += '🔙 Ketik *batal* untuk kembali';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  🔍 *CARI BARANG*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 ' + namaToko + '\n\n━━━━━━━━━━━━━━━━━━\n⌨️ *Ketik nama atau kode:*\n━━━━━━━━━━━━━━━━━━\n\n';
+  m += '💡 *Contoh:*\n   • _dandang eagle 20_\n   • _NN00001_\n   • _golden sunkist_\n\n';
+  m += '✨ Bot otomatis koreksi typo!\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuCariUlang(namaToko) {
-  let m = '━━━━━━━━━━━━━━━━━━\n';
-  m += '🔍 *Cari lagi di ' + namaToko + '?*\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
-  m += '⌨️ Ketik nama/kode barang lain\n\n';
-  m += '┌─────────────────────\n';
-  m += '│ ' + emojiNum(9) + ' 🔄 Ganti toko\n';
-  m += '│ *batal* 🔙 Menu utama\n';
-  m += '└─────────────────────';
+  let m = '━━━━━━━━━━━━━━━━━━\n🔍 *Cari lagi di ' + namaToko + '?*\n━━━━━━━━━━━━━━━━━━\n\n';
+  m += '⌨️ Ketik nama/kode barang lain\n\n┌─────────────────────\n';
+  m += '│ ' + emojiNum(9) + ' 🔄 Ganti toko\n│ *batal* 🔙 Menu utama\n└─────────────────────';
   return m;
 }
 
 // ════════════════════════════════════════════════════════════════
-//   13. PARSER PINTAR
+//   11. PARSER PINTAR
 // ════════════════════════════════════════════════════════════════
 
 function parsePilihanMenu(low) {
@@ -915,12 +768,7 @@ function parsePilihanHari(low) {
 }
 
 function parsePilihanAdmin(low) {
-  const map = {
-    '1': 'listmember', '2': 'listkontak',
-    '3': 'daftar', '4': 'hapus',
-    '5': 'namakontak', '6': 'hapuskontak',
-    '7': 'reload', '8': 'info',
-  };
+  const map = { '1': 'listmember', '2': 'listkontak', '3': 'daftar', '4': 'hapus', '5': 'namakontak', '6': 'hapuskontak', '7': 'reload', '8': 'info' };
   if (map[low]) return map[low];
   if (low.indexOf('list member') >= 0 || low === 'listmember') return 'listmember';
   if (low.indexOf('list kontak') >= 0 || low === 'listkontak') return 'listkontak';
@@ -932,9 +780,8 @@ function parsePilihanAdmin(low) {
   if (low === 'info') return 'info';
   return null;
 }
-
 // ════════════════════════════════════════════════════════════════
-//   14. FORMAT HASIL CARI
+//   12. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
@@ -989,12 +836,17 @@ function formatHasil(searchResult, tokoKode, sender) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. GENERATOR LAPORAN
+//   13. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
   if (tokoKode === 'cp') return genLapPenjualanCP(text, kemarin);
+  if (tokoKode === 'nk') return genLapPenjualanStandar(text, kemarin, 'Nasional Kitchen', 'fullEcer');
+  if (tokoKode === 'tdm') return genLapPenjualanStandar(text, kemarin, 'Perabot Mama TDM', 'noEcer');
+  if (tokoKode === 'oesapa') return genLapPenjualanStandar(text, kemarin, 'Perabot Mama Oesapa', 'noEcer');
+  if (tokoKode === 'kefa') return genLapPenjualanStandar(text, kemarin, 'Perabot Mamaku Kefamenanu', 'noEcer');
   
+  // Fallback umum
   const t = getTanggal(kemarin);
   const k = kemarin ? ' _(kemarin)_' : '';
   const d = {};
@@ -1022,6 +874,68 @@ function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
     GARIS_TEBAL + '\n_Laporan otomatis_';
 }
 
+// ★★★ FORMAT STANDAR UNTUK NK, TDM, OESAPA, KEFA ★★★
+// mode: 'fullEcer' = ada Ecer/Grosir (NK), 'noEcer' = tanpa Ecer/Grosir (TDM, Oesapa, Kefa)
+function genLapPenjualanStandar(text, kemarin, namaTokoFull, mode) {
+  const t = getTanggal(kemarin);
+  const d = { k1: 0, k2: 0, k3: 0, tunai: 0, debit: 0, kredit: 0, ecer: 0, grosir: 0 };
+  
+  text.trim().split('\n').forEach(function(line) {
+    const tr = line.trim();
+    if (!tr) return;
+    const parts = tr.split(/\s+/);
+    if (parts.length < 2) return;
+    
+    const key = parts[0].toLowerCase();
+    const rawValue = parts.slice(1).join(' ').trim();
+    let value = 0;
+    if (rawValue !== '-' && rawValue !== 'kosong' && rawValue !== 'null') {
+      const valueStr = rawValue.replace(/[^0-9]/g, '');
+      value = parseFloat(valueStr) || 0;
+    }
+    
+    if      (key === 'k1') d.k1 = value;
+    else if (key === 'k2') d.k2 = value;
+    else if (key === 'k3') d.k3 = value;
+    else if (key === 'tunai') d.tunai = value;
+    else if (key === 'debit') d.debit = value;
+    else if (key === 'kredit' || key === 'credit') d.kredit = value;
+    else if (key === 'ecer') d.ecer = value;
+    else if (key === 'grosir') d.grosir = value;
+  });
+  
+  function fr(n) {
+    const v = parseFloat(n) || 0;
+    if (v === 0) return 'Rp. -';
+    return 'Rp. ' + v.toLocaleString('id-ID');
+  }
+  
+  const totalUtama = d.k1 + d.k2 + d.k3;
+  
+  let msg = 'Laporan Penjualan\n';
+  msg += 'Toko ' + namaTokoFull + '\n';
+  msg += 'Periode ' + t + '\n\n';
+  msg += 'Kassa 1 ' + fr(d.k1) + '\n';
+  msg += 'Kassa 2 ' + fr(d.k2) + '\n';
+  if (d.k3 > 0) msg += 'Kassa 3 ' + fr(d.k3) + '\n';
+  msg += '\n';
+  msg += 'Total Penjualan Keseluruhan\n';
+  msg += fr(totalUtama) + '\n';
+  msg += '---------------------------------------------\n\n';
+  msg += 'Tunai  ' + fr(d.tunai) + '\n';
+  msg += 'Debit  ' + fr(d.debit) + '\n';
+  msg += 'Credit ' + fr(d.kredit) + '\n';
+  msg += '---------------------------------------------\n';
+  
+  if (mode === 'fullEcer' || d.ecer > 0 || d.grosir > 0) {
+    msg += 'Ecer : ' + fr(d.ecer) + '\n';
+    msg += 'Grosir : ' + fr(d.grosir) + '\n';
+    msg += '--------------------------------------------';
+  }
+  return msg;
+}
+
+// ★★★ FORMAT KHUSUS CENTRAL PERABOT ★★★
 function genLapPenjualanCP(text, kemarin) {
   const t = getTanggal(kemarin);
   const d = {
@@ -1029,8 +943,7 @@ function genLapPenjualanCP(text, kemarin) {
     nk1: '', nk2: '', nk3: '', nk4: '',
     tunai: 0, debit: 0, kredit: 0,
     ecer: 0, grosir: 0,
-    promo: 0,
-    promoTunai: 0, promoDebit: 0, promoKredit: 0,
+    promo: 0, promoTunai: 0, promoDebit: 0, promoKredit: 0,
     parkirKomputer: 0, parkirLuar: 0,
   };
   
@@ -1156,9 +1069,7 @@ function genLapMarket(text, kemarin) {
     const tr = line.trim(); if (!tr) return;
     if (tr.indexOf('nota ') === 0) { d.nota.push(line.trim().substring(5)); return; }
     const p = tr.split(/\s+/);
-    if (p.length >= 2 && p[0] in d) {
-      d[p[0]] = parseFloat(p.slice(1).join('').replace(/[^0-9]/g, '')) || 0;
-    }
+    if (p.length >= 2 && p[0] in d) d[p[0]] = parseFloat(p.slice(1).join('').replace(/[^0-9]/g, '')) || 0;
   });
   const tT = d.oesapa + d.tdm + d.central;
   const tC = d.wa + d.shopee + d.tiktok + d.tokopedia;
@@ -1178,7 +1089,7 @@ function genLapMarket(text, kemarin) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   16. HANDLER ADMIN
+//   14. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
@@ -1201,14 +1112,12 @@ async function handleAdmin(sender, msg, low) {
   }
   if (low === 'listmember') {
     try {
-      let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n';
-      m += '------------------\n';
+      let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n------------------\n';
       if (MEMBERS.length === 0) m += '(belum ada member)\n';
       else for (let i = 0; i < MEMBERS.length; i++) {
         m += (i + 1) + '. ' + MEMBERS[i] + '\n   ' + (KONTAK[MEMBERS[i]] || '(belum ada nama)') + '\n';
       }
-      m += '------------------\n';
-      m += 'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
+      m += '------------------\nSlot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
       await kirimWA(sender, m);
     } catch (e) { await kirimWA(sender, 'Error: ' + e.message); }
     return true;
@@ -1232,8 +1141,7 @@ async function handleAdmin(sender, msg, low) {
   }
   if (low === 'listkontak') {
     const keys = Object.keys(KONTAK);
-    let m = 'Daftar Kontak (' + keys.length + ')\n';
-    m += '------------------\n';
+    let m = 'Daftar Kontak (' + keys.length + ')\n------------------\n';
     keys.forEach(function(k, i) { m += (i + 1) + '. ' + k + '\n   ' + KONTAK[k] + '\n'; });
     await kirimWA(sender, m);
     return true;
@@ -1256,11 +1164,11 @@ async function handleAdmin(sender, msg, low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   17. ROUTES
+//   15. ROUTES
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v3.3', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
+  res.json({ status: 'ok', app: CONFIG.appName + ' v3.4', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
 });
 
 app.get('/reload', function(req, res) {
@@ -1274,10 +1182,9 @@ app.get('/resetsesi/:nomor', function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   18. WEBHOOK UTAMA
+//   16. WEBHOOK UTAMA
 // ════════════════════════════════════════════════════════════════
 
-// "0" SENGAJA DIHAPUS dari KATA_RESET supaya tidak bentrok dengan input nominal
 const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home'];
 
 app.post('/webhook', async function(req, res) {
@@ -1307,9 +1214,7 @@ app.post('/webhook', async function(req, res) {
 
     // ── ADMIN COMMAND ──
     if (isAdmin(sender) && isAdminCommand(low)) {
-      if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu || SESI[sender].adminAksi)) {
-        resetSesi(sender);
-      }
+      if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu || SESI[sender].adminAksi)) resetSesi(sender);
       const handled = await handleAdmin(sender, msg, low);
       if (handled) return;
     }
@@ -1318,7 +1223,7 @@ app.post('/webhook', async function(req, res) {
     const _s = SESI[sender] || {};
     const _lagiInput = _s.menu && (_s.kemarin !== undefined && _s.kemarin !== null);
 
-    // ── RESET (smart - jangan trigger "0" saat input data) ──
+    // ── RESET (smart - tidak trigger "0" saat input data) ──
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
@@ -1514,13 +1419,13 @@ app.post('/webhook', async function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   19. START SERVER
+//   17. START SERVER
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v3.3');
-  console.log('  (Smart Sapaan + Motivasi + CP)');
+  console.log('  ' + CONFIG.appName + ' v3.4');
+  console.log('  (Format Khusus Semua Toko)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  Admin     : ' + CONFIG.adminNumber);
