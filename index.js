@@ -1,8 +1,8 @@
 'use strict';
 
 // ════════════════════════════════════════════════════════════════
-//   BOT WHATSAPP - WAHA EDITION v4.0
-//   Interactive Buttons & Lists (NATIVE WhatsApp)
+//   BOT WHATSAPP - WAHA EDITION v4.1
+//   Fix: Smart Text Parser (angka & nama dikenali)
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -24,15 +24,11 @@ const CONFIG = {
   port:         parseInt(process.env.PORT) || 3000,
   appName:      'Bot Toko Perabot',
   
-  // WAHA Settings
   wahaUrl:      process.env.WAHA_URL || 'https://waha-production-16ae.up.railway.app',
   wahaApiKey:   process.env.WAHA_API_KEY || '',
   wahaSession:  process.env.WAHA_SESSION || 'default',
   
-  // Gemini
   geminiKey:    process.env.GEMINI_KEY,
-  
-  // Admin
   adminNumber:  process.env.ADMIN_NUMBER || '6285829278962',
 
   paths: {
@@ -158,13 +154,11 @@ const fRpP = function(n) { return formatRp(n, 'Rp',  'Rp 0');  };
 const GARIS_TEBAL = '━━━━━━━━━━━━━━━━━━';
 const GARIS_TIPIS = '──────────────────';
 
-// Convert nomor → chatId WAHA
 function toChatId(nomor) {
   const clean = String(nomor).replace(/[^0-9]/g, '');
   return clean + '@c.us';
 }
 
-// Convert chatId WAHA → nomor bersih
 function fromChatId(chatId) {
   return String(chatId).replace('@c.us', '').replace('@s.whatsapp.net', '');
 }
@@ -467,46 +461,32 @@ function updateStok(kode, tokoKode, jumlah) {
 }
 
 loadExcel();
-
 // ════════════════════════════════════════════════════════════════
-//   8. ★★★ WAHA API CLIENT ★★★
+//   8. WAHA API CLIENT
 // ════════════════════════════════════════════════════════════════
 
 function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
 function wahaHeaders() {
   const h = { 'Content-Type': 'application/json' };
-  if (CONFIG.wahaApiKey) {
-    h['X-Api-Key']   = CONFIG.wahaApiKey;
-    h['Api-Key']     = CONFIG.wahaApiKey;
-    h['Authorization'] = 'Bearer ' + CONFIG.wahaApiKey;
-  }
+  if (CONFIG.wahaApiKey) h['X-Api-Key'] = CONFIG.wahaApiKey;
   return h;
 }
 
-// ── Kirim TEKS biasa ────────────────────────────────────
 async function kirimTeks(target, text, retry) {
   retry = retry || 0;
   try {
-    const payload = {
+    await axios.post(CONFIG.wahaUrl + '/api/sendText', {
       chatId: toChatId(target),
       text: text,
       session: CONFIG.wahaSession,
-    };
-    
-    log.info('WAHA', 'Sending: ' + JSON.stringify(payload).substring(0, 200));
-    
-    const resp = await axios.post(
-      CONFIG.wahaUrl + '/api/sendText',
-      payload,
-      { headers: wahaHeaders(), timeout: 15000 }
-    );
+    }, { headers: wahaHeaders(), timeout: 15000 });
     log.info('WAHA', 'TEXT OK ke ' + target);
     return true;
   } catch (err) {
     const status = err.response ? err.response.status : 'NETWORK';
-    const errData = err.response ? JSON.stringify(err.response.data) : err.message;
-    log.warn('WAHA', 'Gagal TEXT ke ' + target + ' (' + status + ') ' + errData);
+    const errData = err.response ? JSON.stringify(err.response.data).substring(0, 200) : err.message;
+    log.warn('WAHA', 'Gagal TEXT (' + status + '): ' + errData);
     if (retry < CONFIG.maxRetry - 1) {
       await tunggu(CONFIG.retryDelay);
       return kirimTeks(target, text, retry + 1);
@@ -516,7 +496,7 @@ async function kirimTeks(target, text, retry) {
   }
 }
 
-// ── Kirim BUTTON (max 3) ───────────────────────────────
+// Kirim button - dengan fallback teks
 async function kirimButton(target, text, buttons, footer, title) {
   try {
     const payload = {
@@ -526,31 +506,23 @@ async function kirimButton(target, text, buttons, footer, title) {
       body:    text,
       footer:  footer || '',
       buttons: buttons.slice(0, 3).map(function(b, i) {
-        return {
-          type:  'reply',
-          reply: {
-            id:    b.id    || ('btn_' + i),
-            title: b.title || ('Button ' + i),
-          }
-        };
+        return { type: 'reply', reply: { id: b.id || ('btn_' + i), title: b.title || ('Button ' + i) } };
       }),
     };
-    await axios.post(CONFIG.wahaUrl + '/api/sendButtons', payload, {
-      headers: wahaHeaders(),
-      timeout: 15000
-    });
+    await axios.post(CONFIG.wahaUrl + '/api/sendButtons', payload, { headers: wahaHeaders(), timeout: 15000 });
     log.info('WAHA', 'BUTTON OK ke ' + target);
     return true;
   } catch (err) {
-    log.warn('WAHA', 'Gagal BUTTON, fallback teks');
-    let fallback = (title ? '*' + title + '*\n' : '') + text + '\n\n';
+    log.warn('WAHA', 'Button tidak support, fallback teks');
+    let fallback = (title ? '*' + title + '*\n' + GARIS_TEBAL + '\n' : '') + text + '\n\n';
     buttons.forEach(function(b, i) { fallback += '*' + (i + 1) + '.* ' + b.title + '\n'; });
-    fallback += '\n_Ketik nomor pilihan_';
+    if (footer) fallback += '\n_' + footer + '_';
+    fallback += '\n\n💬 _Ketik nomor pilihan (1, 2, atau 3)_';
     return kirimTeks(target, fallback);
   }
 }
 
-// ── Kirim LIST MESSAGE (dropdown) ──────────────────────
+// Kirim list - dengan fallback teks
 async function kirimList(target, text, buttonText, sections, footer, title) {
   try {
     const payload = {
@@ -562,30 +534,27 @@ async function kirimList(target, text, buttonText, sections, footer, title) {
       buttonText: buttonText || 'Pilih',
       sections:   sections,
     };
-    await axios.post(CONFIG.wahaUrl + '/api/sendList', payload, {
-      headers: wahaHeaders(),
-      timeout: 15000
-    });
+    await axios.post(CONFIG.wahaUrl + '/api/sendList', payload, { headers: wahaHeaders(), timeout: 15000 });
     log.info('WAHA', 'LIST OK ke ' + target);
     return true;
   } catch (err) {
-    log.warn('WAHA', 'Gagal LIST, fallback teks');
-    let fallback = (title ? '*' + title + '*\n' : '') + text + '\n\n';
+    log.warn('WAHA', 'List tidak support, fallback teks');
+    let fallback = (title ? '*' + title + '*\n' + GARIS_TEBAL + '\n' : '') + text + '\n\n';
     let idx = 1;
     sections.forEach(function(sec) {
-      if (sec.title) fallback += '\n*' + sec.title + '*\n';
+      if (sec.title) fallback += '*' + sec.title + '*\n';
       sec.rows.forEach(function(r) {
-        fallback += idx + '. ' + r.title + '\n';
+        fallback += '*' + idx + '.* ' + r.title + '\n';
         if (r.description) fallback += '   _' + r.description + '_\n';
         idx++;
       });
     });
-    fallback += '\n_Ketik nomor pilihan_';
+    if (footer) fallback += '\n_' + footer + '_';
+    fallback += '\n\n💬 _Ketik nomor pilihan (1-' + (idx - 1) + ')_';
     return kirimTeks(target, fallback);
   }
 }
 
-// Download media (untuk foto)
 async function downloadMedia(mediaUrl) {
   try {
     const resp = await axios.get(mediaUrl, {
@@ -628,7 +597,7 @@ function buatPromptAI(menuType, namaToko, tanggal) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   10. SAPAAN
+//   10. SAPAAN & PARSER
 // ════════════════════════════════════════════════════════════════
 
 const KATA_SAPAAN = ['halo','hai','hi','hello','hey','pagi','siang','sore','malam','selamat','assalamualaikum','salam','permisi'];
@@ -646,11 +615,67 @@ function isAdminCommand(low) {
   return ADMIN_COMMANDS.some(function(cmd) { return low.startsWith(cmd + ' '); });
 }
 
+// ★★★ PARSER PINTAR ★★★
+
+function parsePilihanMenu(low) {
+  if (low === '1' || low === 'satu') return 'menu_1';
+  if (low === '2' || low === 'dua') return 'menu_2';
+  if (low === '3' || low === 'tiga') return 'menu_3';
+  if (low === '4' || low === 'empat') return 'menu_4';
+  if (low === '5' || low === 'lima' || low === '9' || low === 'admin') return 'menu_admin';
+  if (low.indexOf('lap penjualan') >= 0 || low.indexOf('laporan penjualan') >= 0) return 'menu_1';
+  if (low.indexOf('lap harga') >= 0 || low.indexOf('laporan harga') >= 0) return 'menu_2';
+  if (low.indexOf('marketplace') >= 0 || low.indexOf('market') >= 0) return 'menu_3';
+  if (low.indexOf('cari') >= 0 && low.indexOf('harga') >= 0) return 'menu_4';
+  if (low.indexOf('cari') >= 0 && low.indexOf('barang') >= 0) return 'menu_4';
+  if (low === 'menu admin') return 'menu_admin';
+  return null;
+}
+
+function parsePilihanToko(low) {
+  const num = parseInt(low);
+  if (!isNaN(num) && num >= 1 && num <= TOKO_LIST.length) return 'toko_' + TOKO_LIST[num - 1].kode;
+  for (let i = 0; i < TOKO_LIST.length; i++) {
+    const t = TOKO_LIST[i];
+    if (low === t.kode || low === t.nama.toLowerCase()) return 'toko_' + t.kode;
+  }
+  if (low.indexOf('nasional') >= 0 || low === 'nk') return 'toko_nk';
+  if (low.indexOf('tdm') >= 0) return 'toko_tdm';
+  if (low.indexOf('oesapa') >= 0) return 'toko_oesapa';
+  if (low.indexOf('kefa') >= 0 || low.indexOf('mamaku') >= 0) return 'toko_kefa';
+  if (low.indexOf('central') >= 0 || low === 'cp') return 'toko_cp';
+  return null;
+}
+
+function parsePilihanHari(low) {
+  if (low === '1' || low.indexOf('hari ini') >= 0 || low === 'sekarang' || low === 'today') return 'hari_ini';
+  if (low === '2' || low.indexOf('kemarin') >= 0 || low === 'yesterday') return 'kemarin';
+  return null;
+}
+
+function parsePilihanAdmin(low) {
+  const map = {
+    '1': 'adm_listmember', '2': 'adm_listkontak',
+    '3': 'adm_daftar', '4': 'adm_hapus',
+    '5': 'adm_namakontak', '6': 'adm_hapuskontak',
+    '7': 'adm_reload', '8': 'adm_info',
+  };
+  if (map[low]) return map[low];
+  if (low.indexOf('list member') >= 0 || low === 'listmember') return 'adm_listmember';
+  if (low.indexOf('list kontak') >= 0 || low === 'listkontak') return 'adm_listkontak';
+  if (low.indexOf('tambah member') >= 0 || low === 'daftar') return 'adm_daftar';
+  if (low === 'hapus member' || low === 'hapus') return 'adm_hapus';
+  if (low.indexOf('set nama') >= 0 || low === 'namakontak') return 'adm_namakontak';
+  if (low.indexOf('hapus kontak') >= 0) return 'adm_hapuskontak';
+  if (low === 'reload') return 'adm_reload';
+  if (low === 'info') return 'adm_info';
+  return null;
+}
+
 // ════════════════════════════════════════════════════════════════
-//   11. ★★★ MENU INTERAKTIF DENGAN TOMBOL ★★★
+//   11. MENU INTERAKTIF
 // ════════════════════════════════════════════════════════════════
 
-// MENU UTAMA — List Message
 async function tampilkanMenuUtama(sender) {
   const nama = getNama(sender);
   const salam = nama ? nama : 'Kamu';
@@ -661,7 +686,6 @@ async function tampilkanMenuUtama(sender) {
     { title: '🏷️ Laporan Harga Barang', description: 'Laporan harga baru/naik/turun',     rowId: 'menu_2' },
     { title: '🛒 Laporan Marketplace',   description: 'Laporan penjualan marketplace',     rowId: 'menu_3' },
   ];
-  
   if (isMember(sender)) {
     rows.push({ title: '🔍 Cari Harga Barang', description: 'Cari harga & stok barang', rowId: 'menu_4' });
   }
@@ -670,28 +694,22 @@ async function tampilkanMenuUtama(sender) {
   }
   
   const sections = [{ title: 'Daftar Menu', rows: rows }];
-  
-  await kirimList(sender, text, '📋 Tap Pilih Menu', sections, 'Bot Toko Perabot', '🤖 ' + CONFIG.appName);
+  await kirimList(sender, text, '📋 Pilih Menu', sections, 'Bot Toko Perabot', '🤖 ' + CONFIG.appName);
 }
 
-// PILIH TOKO — List Message
 async function tampilkanPilihToko(sender, menuType) {
   const ic = menuType === 1 ? '📊' : menuType === 2 ? '🏷️' : menuType === 'cari' ? '🔍' : '🛒';
   const jd = menuType === 1 ? 'Laporan Penjualan'
            : menuType === 2 ? 'Laporan Harga Barang'
            : menuType === 'cari' ? 'Cari Harga Barang'
            : 'Laporan Marketplace';
-  
   const rows = TOKO_LIST.map(function(t) {
     return { title: t.nama, description: 'Pilih toko ' + t.nama, rowId: 'toko_' + t.kode };
   });
-  
   const sections = [{ title: 'Daftar Toko (5)', rows: rows }];
-  
-  await kirimList(sender, 'Silakan pilih toko untuk laporan:', '🏦 Tap Pilih Toko', sections, 'Tap salah satu toko', ic + ' ' + jd);
+  await kirimList(sender, 'Silakan pilih toko:', '🏦 Pilih Toko', sections, 'Tap salah satu toko', ic + ' ' + jd);
 }
 
-// PILIH HARI — Button (max 3)
 async function tampilkanPilihHari(sender, namaToko) {
   const text = 'Pilih waktu laporan untuk:\n🏦 *' + namaToko + '*';
   const buttons = [
@@ -702,7 +720,6 @@ async function tampilkanPilihHari(sender, namaToko) {
   await kirimButton(sender, text, buttons, getTanggal(false) + ' / ' + getTanggal(true), '📅 Pilih Hari');
 }
 
-// SIAP INPUT — Teks + tombol batal
 async function tampilkanSiapInput(sender, namaToko, kemarin, menuType) {
   const t = getTanggal(kemarin);
   const k = kemarin ? ' (kemarin)' : '';
@@ -714,15 +731,12 @@ async function tampilkanSiapInput(sender, namaToko, kemarin, menuType) {
   } else {
     contoh = 'oesapa 0\ntdm 0\ncentral 21061000\nwa 21061000\nshopee 0\ntunai 304000\ndebit 20757000';
   }
-  
   const text = '✅ *Siap Input!*\n🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n' +
     '📸 *OPSI 1:* Kirim FOTO\n   (akan dibaca AI otomatis)\n\n' +
     '⌨️ *OPSI 2:* Ketik manual\n   Contoh:\n```' + contoh + '```';
-  
   await kirimButton(sender, text, [{ id: 'back_menu', title: '🔙 Batal' }], 'Pilih cara input', '📝 Input Data');
 }
 
-// MENU ADMIN — List
 async function tampilkanMenuAdmin(sender) {
   const rows = [
     { title: '👥 List Member',       description: 'Lihat semua member',     rowId: 'adm_listmember' },
@@ -735,10 +749,9 @@ async function tampilkanMenuAdmin(sender) {
     { title: 'ℹ️ Info Sistem',      description: 'Status bot & statistik', rowId: 'adm_info' },
   ];
   const sections = [{ title: 'Admin Panel', rows: rows }];
-  await kirimList(sender, 'Pilih aksi admin yang ingin dilakukan:', '🛠️ Tap Pilih Aksi', sections, 'Admin Panel', '👑 Menu Admin');
+  await kirimList(sender, 'Pilih aksi admin:', '🛠️ Pilih Aksi', sections, 'Admin Panel', '👑 Menu Admin');
 }
 
-// SIAP CARI — Teks + tombol batal
 async function tampilkanSiapCari(sender, namaToko) {
   const text = '🔍 *Cari di ' + namaToko + '*\n\n' +
     '⌨️ Ketik nama atau kode barang:\n\n' +
@@ -750,7 +763,6 @@ async function tampilkanSiapCari(sender, namaToko) {
   await kirimButton(sender, text, [{ id: 'back_menu', title: '🔙 Kembali' }], '', '🔍 Cari Barang');
 }
 
-// CARI ULANG — Button setelah hasil
 async function tampilkanCariUlang(sender, namaToko) {
   const text = 'Cari barang lagi di *' + namaToko + '*?';
   const buttons = [
@@ -976,8 +988,7 @@ async function handleAdmin(sender, msg, low) {
     await kirimTeks(sender, 'ℹ️ *Info Sistem*\n' + GARIS_TEBAL +
       '\n⏱️ Uptime: ' + jam + 'j ' + mnt + 'm\n👥 Member: ' + MEMBERS.length + '/' + CONFIG.maxMember +
       '\n📦 Data: ' + DATA_BARANG.length + ' item\n📒 Kontak: ' + Object.keys(KONTAK).length +
-      '\n💬 Sesi: ' + Object.keys(SESI).length + '\n💾 Node: ' + process.version +
-      '\n🌐 WAHA: ' + CONFIG.wahaUrl);
+      '\n💬 Sesi: ' + Object.keys(SESI).length + '\n💾 Node: ' + process.version);
     return true;
   }
   return false;
@@ -988,7 +999,7 @@ async function handleAdmin(sender, msg, low) {
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v4.0 (WAHA)', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
+  res.json({ status: 'ok', app: CONFIG.appName + ' v4.1 (WAHA)', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
 });
 
 app.get('/reload', function(req, res) {
@@ -1002,7 +1013,7 @@ app.get('/resetsesi/:nomor', function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   16. ★★★ WEBHOOK UTAMA ★★★
+//   16. ★★★ WEBHOOK UTAMA (FIXED) ★★★
 // ════════════════════════════════════════════════════════════════
 
 const KATA_RESET = ['0', 'batal', 'menu', 'mulai', 'start', 'kembali', 'home'];
@@ -1012,36 +1023,30 @@ app.post('/webhook', async function(req, res) {
 
   try {
     const body = req.body || {};
-    
-    // Parse data dari WAHA webhook
-    const event   = body.event || '';
+    const event = body.event || '';
     const payload = body.payload || body;
     
-    // Ignore non-message events
     if (event && event !== 'message' && event !== 'message.any') {
       log.info('WEBHOOK', 'Skip event: ' + event);
       return;
     }
     
-    // Skip pesan dari bot sendiri
     if (payload.fromMe === true) return;
     
-    // Ambil sender, message, image
     const senderRaw = payload.from || payload.chatId || payload.sender || '';
     const sender = fromChatId(senderRaw);
     
-        // Skip pesan grup, broadcast, dan @lid
+    // Skip pesan grup, broadcast, dan @lid
     if (senderRaw.includes('@g.us') || 
         senderRaw.includes('@broadcast') || 
         senderRaw.includes('@lid') ||
         senderRaw.includes('-')) {
-      log.info('WEBHOOK', 'Skip pesan non-personal: ' + senderRaw);
+      log.info('WEBHOOK', 'Skip non-personal: ' + senderRaw);
       return;
     }
     
-    // Validasi nomor harus angka
-    if (!/^[0-9]+$/.test(sender)) {
-      log.info('WEBHOOK', 'Skip nomor tidak valid: ' + sender);
+    if (!sender || !/^[0-9]+$/.test(sender)) {
+      log.info('WEBHOOK', 'Skip nomor invalid: ' + sender);
       return;
     }
     
@@ -1050,7 +1055,6 @@ app.post('/webhook', async function(req, res) {
     let listResponse = null;
     let mediaUrl = null;
     
-    // Cek apakah respons button/list
     if (payload.selectedButtonId) {
       buttonResponse = payload.selectedButtonId;
       message = payload.body || '';
@@ -1065,12 +1069,9 @@ app.post('/webhook', async function(req, res) {
       message = payload.message.text;
     }
     
-    // Cek media (foto)
     if (payload.hasMedia || payload.mediaUrl || (payload.media && payload.media.url)) {
       mediaUrl = payload.mediaUrl || (payload.media && payload.media.url);
     }
-    
-    if (!sender) { log.warn('WEBHOOK', 'Request tanpa sender'); return; }
     
     const msg = (message || buttonResponse || listResponse || '').trim();
     const low = msg.toLowerCase();
@@ -1098,7 +1099,7 @@ app.post('/webhook', async function(req, res) {
       if (handled) return;
     }
 
-    // ── BUTTON: Kembali ──
+    // ── BUTTON: Kembali / Reset kata kunci ──
     if (buttonResponse === 'back_menu' || KATA_RESET.indexOf(low) >= 0) {
       resetSesi(sender);
       await tampilkanMenuUtama(sender);
@@ -1134,9 +1135,27 @@ app.post('/webhook', async function(req, res) {
       if (aksi === 'hapuskontak') return await handleAdmin(sender, 'hapuskontak ' + msg, 'hapuskontak ' + low);
     }
 
-    // ════════════════════════════════════════════════════
-    // LIST RESPONSE: MENU UTAMA
-    // ════════════════════════════════════════════════════
+    // ★★★ KONVERSI TEXT KE LIST/BUTTON ID ★★★
+    if (!listResponse && !buttonResponse && msg) {
+      if (s.mode === 'admin_menu') {
+        const adminId = parsePilihanAdmin(low);
+        if (adminId) listResponse = adminId;
+      }
+      else if ((s.mode === 'cari' && !s.tokoKode) || (s.menu && s.menu !== 3 && !s.toko)) {
+        const tokoId = parsePilihanToko(low);
+        if (tokoId) listResponse = tokoId;
+      }
+      else if (s.menu && (s.toko || s.menu === 3) && (s.kemarin === undefined || s.kemarin === null)) {
+        const hariId = parsePilihanHari(low);
+        if (hariId) buttonResponse = hariId;
+      }
+      else if (!s.menu && !s.mode) {
+        const menuId = parsePilihanMenu(low);
+        if (menuId) listResponse = menuId;
+      }
+    }
+
+    // ── LIST: MENU UTAMA ──
     if (listResponse && listResponse.startsWith('menu_')) {
       const pil = listResponse.substring(5);
       if (pil === '1' || pil === '2') {
@@ -1164,9 +1183,7 @@ app.post('/webhook', async function(req, res) {
       }
     }
 
-    // ════════════════════════════════════════════════════
-    // LIST RESPONSE: PILIH TOKO
-    // ════════════════════════════════════════════════════
+    // ── LIST: PILIH TOKO ──
     if (listResponse && listResponse.startsWith('toko_')) {
       const tokoKode = listResponse.substring(5);
       const toko = TOKO_LIST.find(function(t) { return t.kode === tokoKode; });
@@ -1174,7 +1191,15 @@ app.post('/webhook', async function(req, res) {
       
       if (s.mode === 'cari') {
         updateSesi(sender, { tokoKode: toko.kode });
-        await tampilkanSiapCari(sender, toko.nama);
+        if (s.pendingKw) {
+          const kw = s.pendingKw;
+          updateSesi(sender, { pendingKw: null });
+          await kirimTeks(sender, formatHasil(cariBarang(kw), toko.kode, sender));
+          await tunggu(800);
+          await tampilkanCariUlang(sender, toko.nama);
+        } else {
+          await tampilkanSiapCari(sender, toko.nama);
+        }
         return;
       }
       updateSesi(sender, { toko: toko.kode });
@@ -1182,18 +1207,14 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ════════════════════════════════════════════════════
-    // LIST RESPONSE: ADMIN
-    // ════════════════════════════════════════════════════
+    // ── LIST: ADMIN ──
     if (listResponse && listResponse.startsWith('adm_')) {
       if (!isAdmin(sender)) return;
       const aksi = listResponse.substring(4);
-      
       if (['listmember','listkontak','reload','info'].indexOf(aksi) >= 0) {
         resetSesi(sender);
         return await handleAdmin(sender, aksi, aksi);
       }
-      
       if (aksi === 'daftar') {
         updateSesi(sender, { adminAksi: 'daftar', mode: null });
         await kirimTeks(sender, '➕ *Tambah Member*\n\nKetik nomor HP:\n_6281234567890_\n\nKetik *0* untuk batal');
@@ -1216,9 +1237,7 @@ app.post('/webhook', async function(req, res) {
       }
     }
 
-    // ════════════════════════════════════════════════════
-    // BUTTON: PILIH HARI
-    // ════════════════════════════════════════════════════
+    // ── BUTTON: PILIH HARI ──
     if (buttonResponse === 'hari_ini' || buttonResponse === 'kemarin') {
       const kem = buttonResponse === 'kemarin';
       updateSesi(sender, { kemarin: kem });
@@ -1227,16 +1246,10 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ════════════════════════════════════════════════════
-    // BUTTON: CARI LAGI / GANTI TOKO
-    // ════════════════════════════════════════════════════
+    // ── BUTTON: CARI LAGI / GANTI TOKO ──
     if (buttonResponse === 'cari_lagi') {
-      if (s.tokoKode) {
-        await tampilkanSiapCari(sender, NAMA_TOKO[s.tokoKode]);
-      } else {
-        updateSesi(sender, { mode: 'cari' });
-        await tampilkanPilihToko(sender, 'cari');
-      }
+      if (s.tokoKode) await tampilkanSiapCari(sender, NAMA_TOKO[s.tokoKode]);
+      else { updateSesi(sender, { mode: 'cari' }); await tampilkanPilihToko(sender, 'cari'); }
       return;
     }
     if (buttonResponse === 'ganti_toko') {
@@ -1245,9 +1258,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ════════════════════════════════════════════════════
-    // MODE CARI: terima keyword
-    // ════════════════════════════════════════════════════
+    // ── MODE CARI: terima keyword ──
     if (s.mode === 'cari' && s.tokoKode) {
       if (!msg) return;
       await kirimTeks(sender, formatHasil(cariBarang(msg), s.tokoKode, sender));
@@ -1256,14 +1267,11 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ════════════════════════════════════════════════════
-    // CARI LANGSUNG dengan "cari" prefix
-    // ════════════════════════════════════════════════════
+    // ── CARI LANGSUNG dengan "cari" prefix ──
     if (low.startsWith('cari ')) {
       const kw = msg.substring(5).trim();
       if (!kw) { await kirimTeks(sender, 'Contoh: cari dandang eagle 20'); return; }
       if (!isMember(sender)) { await kirimTeks(sender, '🚫 Hanya untuk member'); return; }
-      
       if (s.mode === 'cari' && s.tokoKode) {
         await kirimTeks(sender, formatHasil(cariBarang(kw), s.tokoKode, sender));
         await tunggu(800);
@@ -1275,14 +1283,11 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ════════════════════════════════════════════════════
-    // INPUT LAPORAN (foto / teks)
-    // ════════════════════════════════════════════════════
+    // ── INPUT LAPORAN (foto / teks) ──
     if (s.menu && (s.kemarin !== undefined && s.kemarin !== null)) {
       const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
       let laporan = '';
 
-      // Foto
       if (mediaUrl) {
         await kirimTeks(sender, '📸 Foto diterima, sedang dianalisa AI...');
         try {
@@ -1330,8 +1335,8 @@ app.post('/webhook', async function(req, res) {
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v4.0');
-  console.log('  (WAHA + Interactive Buttons)');
+  console.log('  ' + CONFIG.appName + ' v4.1');
+  console.log('  (WAHA + Smart Text Parser)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  WAHA URL  : ' + CONFIG.wahaUrl);
