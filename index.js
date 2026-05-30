@@ -488,20 +488,30 @@ function wahaHeaders() {
 async function kirimTeks(target, text, retry) {
   retry = retry || 0;
   try {
-    await axios.post(CONFIG.wahaUrl + '/api/sendText', {
+    const payload = {
       chatId: toChatId(target),
       text: text,
       session: CONFIG.wahaSession,
-    }, { headers: wahaHeaders(), timeout: 15000 });
+    };
+    
+    log.info('WAHA', 'Sending: ' + JSON.stringify(payload).substring(0, 200));
+    
+    const resp = await axios.post(
+      CONFIG.wahaUrl + '/api/sendText',
+      payload,
+      { headers: wahaHeaders(), timeout: 15000 }
+    );
     log.info('WAHA', 'TEXT OK ke ' + target);
     return true;
   } catch (err) {
-    log.warn('WAHA', 'Gagal TEXT ke ' + target + ' attempt ' + (retry + 1));
+    const status = err.response ? err.response.status : 'NETWORK';
+    const errData = err.response ? JSON.stringify(err.response.data) : err.message;
+    log.warn('WAHA', 'Gagal TEXT ke ' + target + ' (' + status + ') ' + errData);
     if (retry < CONFIG.maxRetry - 1) {
       await tunggu(CONFIG.retryDelay);
       return kirimTeks(target, text, retry + 1);
     }
-    log.error('WAHA', 'GAGAL TOTAL TEXT', err.message);
+    log.error('WAHA', 'GAGAL TOTAL', errData);
     return false;
   }
 }
