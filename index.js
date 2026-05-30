@@ -113,6 +113,25 @@ const ADMIN_COMMANDS = [
   'listkontak', 'reload', 'info'
 ];
 
+// ★★★ KONFIGURASI INPUT BERTAHAP CENTRAL PERABOT ★★★
+const CP_FIELDS = [
+  { key: 'k1',             label: 'Kassa 1 (Yuni-Salsa)',                emoji: '💵' },
+  { key: 'k2',             label: 'Kassa 2 (Nanda-Umi-Marselina)',       emoji: '💵' },
+  { key: 'k3',             label: 'Kassa 3 (Febri-Jien-Tika)',           emoji: '💵' },
+  { key: 'k4',             label: 'Kassa 4 (Delfi-Tirsa)',               emoji: '💵' },
+  { key: 'tunai',          label: 'Total Tunai',                          emoji: '💰' },
+  { key: 'debit',          label: 'Total Debit',                          emoji: '💳' },
+  { key: 'kredit',         label: 'Total Credit',                         emoji: '💳' },
+  { key: 'ecer',           label: 'Total Penjualan Ecer',                 emoji: '🛒' },
+  { key: 'grosir',         label: 'Total Penjualan Grosir',               emoji: '📦' },
+  { key: 'promo',          label: 'Total Kasir Promo',                    emoji: '🎁' },
+  { key: 'promoTunai',     label: 'Promo - Tunai',                        emoji: '🎁' },
+  { key: 'promoDebit',     label: 'Promo - Debit',                        emoji: '🎁' },
+  { key: 'promoKredit',    label: 'Promo - Credit',                       emoji: '🎁' },
+  { key: 'parkirKomputer', label: 'Parkir di Komputer',                   emoji: '🅿️' },
+  { key: 'parkirLuar',     label: 'Parkir Stor Luar',                     emoji: '🅿️' },
+];
+
 // ════════════════════════════════════════════════════════════════
 //   4. LOGGER
 // ════════════════════════════════════════════════════════════════
@@ -863,6 +882,136 @@ function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
     GARIS_TEBAL + '\n_Laporan otomatis_';
 }
 
+// ★★★ FUNGSI MENU INPUT BERTAHAP CP ★★★
+
+function getMenuTanyaField(fieldIndex, dataSudahIsi) {
+  const field = CP_FIELDS[fieldIndex];
+  const total = CP_FIELDS.length;
+  const sisa = total - fieldIndex - 1;
+  
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
+  m += '│  📝 *INPUT LAPORAN CP*  │\n';
+  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 Central Perabot\n';
+  m += '📊 Progress: ' + (fieldIndex + 1) + '/' + total + '\n';
+  m += '━━━━━━━━━━━━━━━━━━\n\n';
+  m += field.emoji + ' *Masukkan ' + field.label + ':*\n\n';
+  m += '💬 *Ketik angka saja*\n';
+  m += '   Contoh: _42345000_\n\n';
+  m += 'ℹ️ Kalau kosong/tidak ada,\n';
+  m += '   ketik *0* atau *skip*\n\n';
+  
+  // Tampilkan ringkasan data yang sudah diisi
+  if (fieldIndex > 0) {
+    m += '━━━━━━━━━━━━━━━━━━\n';
+    m += '✅ *Sudah diisi:*\n';
+    for (let i = 0; i < fieldIndex; i++) {
+      const f = CP_FIELDS[i];
+      const v = dataSudahIsi[f.key] || 0;
+      m += '   ' + (i + 1) + '. ' + f.label + ': Rp ' + v.toLocaleString('id-ID') + '\n';
+    }
+    m += '━━━━━━━━━━━━━━━━━━\n\n';
+  }
+  
+  m += '🔙 Ketik *batal* untuk membatalkan';
+  return m;
+}
+
+function getMenuKonfirmasiCP(data) {
+  function fr(n) {
+    const v = parseFloat(n) || 0;
+    if (v === 0) return 'Rp. -';
+    return 'Rp. ' + v.toLocaleString('id-ID');
+  }
+  
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n';
+  m += '│  ✅ *KONFIRMASI DATA*  │\n';
+  m += '╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 *Central Perabot*\n';
+  m += '📅 ' + getTanggal(data._kemarin) + '\n';
+  m += '━━━━━━━━━━━━━━━━━━\n\n';
+  
+  m += '*KASSA:*\n';
+  m += '• Kassa 1: ' + fr(data.k1) + '\n';
+  m += '• Kassa 2: ' + fr(data.k2) + '\n';
+  m += '• Kassa 3: ' + fr(data.k3) + '\n';
+  m += '• Kassa 4: ' + fr(data.k4) + '\n\n';
+  
+  m += '*METODE BAYAR:*\n';
+  m += '• Tunai: ' + fr(data.tunai) + '\n';
+  m += '• Debit: ' + fr(data.debit) + '\n';
+  m += '• Credit: ' + fr(data.kredit) + '\n\n';
+  
+  m += '*JENIS PENJUALAN:*\n';
+  m += '• Ecer: ' + fr(data.ecer) + '\n';
+  m += '• Grosir: ' + fr(data.grosir) + '\n\n';
+  
+  m += '*KASIR PROMO:*\n';
+  m += '• Total: ' + fr(data.promo) + '\n';
+  m += '• Tunai: ' + fr(data.promoTunai) + '\n';
+  m += '• Debit: ' + fr(data.promoDebit) + '\n';
+  m += '• Credit: ' + fr(data.promoKredit) + '\n\n';
+  
+  m += '*PARKIR:*\n';
+  m += '• Komputer: ' + fr(data.parkirKomputer) + '\n';
+  m += '• Stor Luar: ' + fr(data.parkirLuar) + '\n';
+  m += '━━━━━━━━━━━━━━━━━━\n\n';
+  
+  m += '📤 *Lanjutkan kirim laporan?*\n\n';
+  m += '┌─────────────────────\n';
+  m += '│ ' + emojiNum(1) + ' ✅ Ya, kirim laporan\n';
+  m += '│ ' + emojiNum(2) + ' ✏️ Edit ulang dari awal\n';
+  m += '│ ' + emojiNum(0) + ' ❌ Batal\n';
+  m += '└─────────────────────';
+  return m;
+}
+
+// ★★★ Generate laporan CP dari data object (mode bertahap) ★★★
+function genLapPenjualanCP_FromData(d, kemarin) {
+  const t = getTanggal(kemarin);
+  
+  function fr(n) {
+    const v = parseFloat(n) || 0;
+    if (v === 0) return 'Rp. -';
+    return 'Rp. ' + v.toLocaleString('id-ID');
+  }
+  
+  const totalUtama = (d.k1 || 0) + (d.k2 || 0) + (d.k3 || 0) + (d.k4 || 0);
+  const totalParkir = (d.parkirKomputer || 0) + (d.parkirLuar || 0);
+  
+  let msg = 'Laporan Penjualan Toko Central Perabot Periode ' + t + '\n\n';
+  msg += 'Kassa 1 (Yuni-Salsa) ' + fr(d.k1) + '\n';
+  msg += 'Kassa 2 (Nanda-Umi-Marselina) ' + fr(d.k2) + '\n';
+  msg += 'Kassa 3 (Febri-Jien-Tika) ' + fr(d.k3) + '\n';
+  msg += 'Kassa 4 (Delfi-Tirsa) ' + fr(d.k4) + '\n\n';
+  msg += 'Total Penjualan Keseluruhan: ' + fr(totalUtama) + '\n';
+  msg += '---------------------------------------------\n\n';
+  msg += 'Tunai  ' + fr(d.tunai) + '\n';
+  msg += 'Debit  ' + fr(d.debit) + '\n';
+  msg += 'Credit ' + fr(d.kredit) + '\n';
+  msg += '---------------------------------------------\n';
+  msg += '---------------------------------------------\n\n';
+  msg += 'Ecer: ' + fr(d.ecer) + '\n';
+  msg += 'Grosir : ' + fr(d.grosir) + '\n\n';
+  msg += '---------------------------------------------\n\n';
+  msg += 'Laporan Penjualan Kasir Promo\n';
+  msg += 'Periode ' + t + '\n\n';
+  msg += 'Total Penjualan Keseluruhan: ' + fr(d.promo) + '\n';
+  msg += '---------------------------------------------\n';
+  msg += 'Tunai  ' + fr(d.promoTunai) + '\n';
+  msg += 'Debit  ' + fr(d.promoDebit) + '\n';
+  msg += 'Credit ' + fr(d.promoKredit) + '\n';
+  msg += '---------------------------------------------\n\n';
+  msg += 'Laporan Parkir \n';
+  msg += 'Periode ' + t + '\n\n';
+  msg += 'Parkir di Komputer : ' + fr(d.parkirKomputer) + '\n';
+  msg += 'Parkir Stor Luar : ' + fr(d.parkirLuar) + '\n';
+  msg += '---------------------------------------------\n';
+  msg += 'Total Parkir  ' + fr(totalParkir) + '\n';
+  msg += '---------------------------------------------';
+  return msg;
+}
+
 // ★★★ FORMAT KHUSUS CENTRAL PERABOT ★★★
 function genLapPenjualanCP(text, kemarin) {
   const t = getTanggal(kemarin);
@@ -1311,7 +1460,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── LAPORAN: Pilih hari ──
+        // ── LAPORAN: Pilih hari ──
     if (s.kemarin === undefined || s.kemarin === null) {
       const kem = parsePilihanHari(low);
       if (kem === null) {
@@ -1321,10 +1470,100 @@ app.post('/webhook', async function(req, res) {
       }
       updateSesi(sender, { kemarin: kem });
       const nm = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
+      
+      // ★★★ KHUSUS CP — mode input bertahap ★★★
+      if (s.menu === 1 && s.toko === 'cp') {
+        updateSesi(sender, { 
+          cpMode: true, 
+          cpFieldIndex: 0, 
+          cpData: { _kemarin: kem } 
+        });
+        await kirimWA(sender, getMenuTanyaField(0, {}));
+        return;
+      }
+      
       await kirimWA(sender, getMenuSiapInput(nm, kem, s.menu, s.toko));
       return;
     }
 
+      // ★★★ MODE INPUT BERTAHAP CENTRAL PERABOT ★★★
+    if (s.cpMode === true) {
+      const idx = s.cpFieldIndex || 0;
+      
+      // Cek kalau lagi di tahap konfirmasi
+      if (s.cpKonfirmasi === true) {
+        if (low === '1' || low === 'ya' || low === 'kirim') {
+          // Generate laporan
+          const data = s.cpData || {};
+          const laporanCP = genLapPenjualanCP_FromData(data, data._kemarin);
+          await kirimWA(sender, laporanCP);
+          resetSesi(sender);
+          await tunggu(1500);
+          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+          return;
+        }
+        if (low === '2' || low === 'edit' || low === 'ulang') {
+          // Edit ulang dari awal
+          updateSesi(sender, { 
+            cpFieldIndex: 0, 
+            cpData: { _kemarin: s.cpData._kemarin },
+            cpKonfirmasi: false 
+          });
+          await kirimWA(sender, '🔄 *Mulai input ulang dari awal*\n\n');
+          await tunggu(500);
+          await kirimWA(sender, getMenuTanyaField(0, {}));
+          return;
+        }
+        if (low === '0' || low === 'batal' || low === 'cancel') {
+          resetSesi(sender);
+          await kirimWA(sender, '❌ Input dibatalkan.\n\n' + getMenuUtama(sender));
+          return;
+        }
+        // Pilihan tidak dikenali
+        await kirimWA(sender, '🤔 Pilih *1* untuk kirim, *2* untuk edit ulang, atau *0* untuk batal');
+        return;
+      }
+      
+      // Cek perintah batal
+      if (low === 'batal' || low === 'cancel') {
+        resetSesi(sender);
+        await kirimWA(sender, '❌ Input dibatalkan.\n\n' + getMenuUtama(sender));
+        return;
+      }
+      
+      // Parse nilai (terima angka, "0", "skip", atau dengan format)
+      let value = 0;
+      if (low === 'skip' || low === '-') {
+        value = 0;
+      } else {
+        const cleaned = msg.replace(/[^0-9]/g, '');
+        if (cleaned) value = parseFloat(cleaned);
+      }
+      
+      // Simpan data
+      const field = CP_FIELDS[idx];
+      const newData = Object.assign({}, s.cpData || {}, { [field.key]: value });
+      updateSesi(sender, { cpData: newData });
+      
+      // Cek apakah masih ada field berikutnya
+      const nextIdx = idx + 1;
+      if (nextIdx < CP_FIELDS.length) {
+        updateSesi(sender, { cpFieldIndex: nextIdx });
+        await tunggu(300);
+        await kirimWA(sender, '✅ Tersimpan: *Rp ' + value.toLocaleString('id-ID') + '*');
+        await tunggu(500);
+        await kirimWA(sender, getMenuTanyaField(nextIdx, newData));
+      } else {
+        // Semua field sudah diisi → tampil konfirmasi
+        updateSesi(sender, { cpKonfirmasi: true });
+        await tunggu(300);
+        await kirimWA(sender, '✅ *Semua data sudah lengkap!*');
+        await tunggu(500);
+        await kirimWA(sender, getMenuKonfirmasiCP(newData));
+      }
+      return;
+    }
+    
     // ── LAPORAN: Input data ──
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
