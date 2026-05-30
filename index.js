@@ -1012,16 +1012,33 @@ async function handleAdmin(sender, msg, low) {
     return true;
   }
 
-  if (low === 'listmember') {
-    let m = '👥 *Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')*\n' + GARIS_TEBAL + '\n';
-    if (MEMBERS.length === 0) m += '(belum ada member)\n';
-    else {
-      for (let i = 0; i < MEMBERS.length; i++) {
-        m += (i + 1) + '. ' + MEMBERS[i] + '\n   ' + (KONTAK[MEMBERS[i]] || '(belum ada nama)') + '\n';
+    if (low === 'listmember') {
+    try {
+      log.info('ADMIN', 'listmember dipanggil, total: ' + MEMBERS.length);
+      
+      let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n';
+      m += '------------------\n';
+      
+      if (MEMBERS.length === 0) {
+        m += '(belum ada member)\n';
+      } else {
+        for (let i = 0; i < MEMBERS.length; i++) {
+          const nm = KONTAK[MEMBERS[i]] || '(belum ada nama)';
+          m += (i + 1) + '. ' + MEMBERS[i] + '\n';
+          m += '   ' + nm + '\n';
+        }
       }
+      
+      m += '------------------\n';
+      m += 'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
+      
+      log.info('ADMIN', 'listmember msg length: ' + m.length);
+      const ok = await kirimWA(sender, m);
+      log.info('ADMIN', 'listmember kirim status: ' + ok);
+    } catch (e) {
+      log.error('ADMIN', 'listmember crash', e.message);
+      await kirimWA(sender, 'Error listmember: ' + e.message);
     }
-    m += GARIS_TEBAL + '\n📊 Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
-    await kirimWA(sender, m);
     return true;
   }
 
