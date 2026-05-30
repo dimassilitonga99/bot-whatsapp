@@ -476,7 +476,11 @@ function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
 function wahaHeaders() {
   const h = { 'Content-Type': 'application/json' };
-  if (CONFIG.wahaApiKey) h['X-Api-Key'] = CONFIG.wahaApiKey;
+  if (CONFIG.wahaApiKey) {
+    h['X-Api-Key']   = CONFIG.wahaApiKey;
+    h['Api-Key']     = CONFIG.wahaApiKey;
+    h['Authorization'] = 'Bearer ' + CONFIG.wahaApiKey;
+  }
   return h;
 }
 
