@@ -1030,9 +1030,18 @@ app.post('/webhook', async function(req, res) {
     const senderRaw = payload.from || payload.chatId || payload.sender || '';
     const sender = fromChatId(senderRaw);
     
-    // Skip pesan grup
-    if (senderRaw.includes('@g.us') || senderRaw.includes('-')) {
-      log.info('WEBHOOK', 'Skip pesan grup: ' + senderRaw);
+        // Skip pesan grup, broadcast, dan @lid
+    if (senderRaw.includes('@g.us') || 
+        senderRaw.includes('@broadcast') || 
+        senderRaw.includes('@lid') ||
+        senderRaw.includes('-')) {
+      log.info('WEBHOOK', 'Skip pesan non-personal: ' + senderRaw);
+      return;
+    }
+    
+    // Validasi nomor harus angka
+    if (!/^[0-9]+$/.test(sender)) {
+      log.info('WEBHOOK', 'Skip nomor tidak valid: ' + sender);
       return;
     }
     
