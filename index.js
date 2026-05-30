@@ -543,10 +543,244 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
 //   11. SAPAAN
 // ════════════════════════════════════════════════════════════════
 
-const KATA_SAPAAN = [
-  'halo','hai','hi','hello','hey','pagi','siang','sore','malam','selamat',
-  'assalamualaikum','salam','permisi',
+c// ════════════════════════════════════════════════════════════════
+//   11. SAPAAN PINTAR & MOTIVASI
+// ════════════════════════════════════════════════════════════════
+
+// Kategori sapaan dengan mapping ke balasan yang sesuai
+const SAPAAN_MAP = {
+  // Sapaan kasual
+  'halo':     { kategori: 'kasual', balasan: ['Halo', 'Haloo', 'Hai juga', 'Haaai', 'Halooo'] },
+  'hai':      { kategori: 'kasual', balasan: ['Hai', 'Haiii', 'Halo juga', 'Hai hai', 'Hai!'] },
+  'hi':       { kategori: 'kasual', balasan: ['Hi', 'Hi there', 'Hiii', 'Hi juga', 'Haii'] },
+  'hello':    { kategori: 'kasual', balasan: ['Hello', 'Hello juga', 'Helloo', 'Hi there'] },
+  'hallo':    { kategori: 'kasual', balasan: ['Hallo', 'Hallooo', 'Halo juga', 'Hai!'] },
+  'helo':     { kategori: 'kasual', balasan: ['Helo', 'Helooo', 'Halo juga', 'Hai!'] },
+  'hey':      { kategori: 'kasual', balasan: ['Hey', 'Hey juga', 'Heyyy', 'Hai!'] },
+  'hei':      { kategori: 'kasual', balasan: ['Hei', 'Hei juga', 'Heii', 'Halo!'] },
+  'yo':       { kategori: 'kasual', balasan: ['Yo', 'Yo bro', 'Yoyoyo', 'Yo juga'] },
+  'p':        { kategori: 'kasual', balasan: ['p juga', 'Halo', 'Hai', 'Iya?'] },
+  'ping':     { kategori: 'kasual', balasan: ['Pong! 🏓', 'Pong 🏓', 'Pong juga'] },
+  
+  // Sapaan berdasarkan waktu
+  'pagi':     { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi', 'Pagi juga', 'Pagiii', 'Pagi yang cerah'] },
+  'siang':    { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang', 'Siang juga', 'Siaaang'] },
+  'sore':     { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore', 'Sore juga', 'Soreee'] },
+  'malam':    { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam', 'Malam juga', 'Malaaam'] },
+  
+  // Selamat + waktu
+  'selamat pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi juga', 'Pagi yang indah', 'Selamat pagi'] },
+  'selamat siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang juga', 'Siang yang cerah', 'Selamat siang'] },
+  'selamat sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore juga', 'Sore yang menyenangkan', 'Selamat sore'] },
+  'selamat malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam juga', 'Malam yang tenang', 'Selamat malam'] },
+  
+  // Singkatan/slang
+  'met pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Met pagi juga', 'Selamat pagi', 'Pagi!'] },
+  'met siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Met siang juga', 'Selamat siang', 'Siang!'] },
+  'met sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Met sore juga', 'Selamat sore', 'Sore!'] },
+  'met malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Met malam juga', 'Selamat malam', 'Malam!'] },
+  
+  // Islami
+  'assalamualaikum':       { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam', 'Waalaikumsalam wr. wb.'] },
+  'assalamu':              { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam'] },
+  'assalamualaikum wr wb': { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam wr. wb.'] },
+  'salam':                 { kategori: 'islami', balasan: ['Salam juga', 'Salam sejahtera', 'Waalaikumsalam'] },
+  
+  // English
+  'good morning':   { kategori: 'english', waktu: 'Pagi',  balasan: ['Good morning', 'Morning!', 'Good morning to you'] },
+  'good afternoon': { kategori: 'english', waktu: 'Siang', balasan: ['Good afternoon', 'Afternoon!', 'Good afternoon to you'] },
+  'good evening':   { kategori: 'english', waktu: 'Sore',  balasan: ['Good evening', 'Evening!', 'Good evening to you'] },
+  'good night':     { kategori: 'english', waktu: 'Malam', balasan: ['Good night', 'Have a nice dream', 'Sleep well'] },
+  
+  // Sopan
+  'permisi':    { kategori: 'sopan', balasan: ['Iya, silakan', 'Iya, ada yang bisa dibantu?', 'Ya, silakan'] },
+  'maaf':       { kategori: 'sopan', balasan: ['Iya, tidak apa-apa', 'Iya, ada yang bisa dibantu?', 'Iya, santai saja'] },
+  'maaf ganggu':{ kategori: 'sopan', balasan: ['Tidak mengganggu kok', 'Santai saja', 'Tidak apa-apa, silakan'] },
+};
+
+// Kata yang dideteksi sebagai sapaan (dari SAPAAN_MAP)
+const KATA_SAPAAN_LIST = Object.keys(SAPAAN_MAP);
+
+// Kalimat motivasi random untuk sapaan pertama
+const KALIMAT_MOTIVASI = [
+  '✨ _Hari yang baru, semangat yang baru!_ 💪',
+  '🌟 _Setiap hari adalah kesempatan untuk jadi lebih baik!_ 🚀',
+  '💎 _Kerja keras hari ini, hasil manis besok!_ 🍯',
+  '🌈 _Tetap semangat dan jangan menyerah!_ 🔥',
+  '⭐ _Senyum dulu, rezeki menyusul!_ 😊',
+  '🎯 _Fokus pada tujuan, abaikan keraguan!_ 💯',
+  '🌸 _Hari ini akan jadi hari yang luar biasa!_ ✨',
+  '🚀 _Sukses dimulai dari langkah kecil hari ini!_ 👣',
+  '💪 _Kamu lebih kuat dari yang kamu kira!_ 💯',
+  '🌻 _Jangan lupa bahagia hari ini ya!_ 😊',
+  '🔥 _Semangat terus, kamu hebat!_ 👏',
+  '✨ _Setiap detik adalah anugerah, manfaatkan dengan baik!_ 🙏',
+  '🎁 _Hari ini adalah hadiah, makanya disebut present!_ 🎀',
+  '🌟 _Percayalah pada diri sendiri, kamu bisa!_ 💪',
+  '☀️ _Tetap positif, hal baik akan datang!_ 🌈',
+  '💝 _Berkah selalu menyertai orang yang bersyukur_ 🙏',
+  '🌺 _Mulailah hari dengan senyuman terbaikmu!_ 😊',
+  '⚡ _Energi positif menarik hal-hal positif!_ ✨',
+  '🎊 _Hari yang produktif menanti, ayo semangat!_ 🚀',
+  '💫 _Mimpi besar dimulai dari hari ini!_ 🌟',
+  '🌷 _Hidup itu indah, nikmati setiap momennya!_ 💖',
+  '🦋 _Jadilah versi terbaik dari dirimu hari ini!_ ⭐',
+  '🌊 _Mengalir seperti air, kuat seperti karang!_ 💪',
+  '🌞 _Cerahkan hari orang lain dengan kebaikanmu!_ 😊',
+  '🎵 _Hidup ini lagu, mainkan dengan indah!_ 🎶',
 ];
+
+// Tanya kabar random
+const TANYA_KABAR = [
+  'Bagaimana kabarnya hari ini? 😊',
+  'Apa kabar? Semoga sehat selalu ya 💪',
+  'Gimana kabarnya? Semoga baik-baik saja 🌸',
+  'Apa kabar hari ini? Semoga selalu dalam keadaan baik 🙏',
+  'Bagaimana kabar? Semoga harimu menyenangkan 😊',
+  'Kabar baik kah hari ini? 🌟',
+  'Lagi sibuk apa nih hari ini? 💼',
+  'Bagaimana hari ini? Lancar semua? ✨',
+  'Apa kabar? Semoga selalu diberi kesehatan 🙏',
+  'Gimana harinya? Semoga produktif 🚀',
+];
+
+function cocokKata(low, kata) {
+  return low === kata 
+    || low.startsWith(kata + ' ') 
+    || low.startsWith(kata + ',') 
+    || low.startsWith(kata + '!')
+    || low.startsWith(kata + '.')
+    || low.endsWith(' ' + kata);
+}
+
+function isSapaan(low) {
+  // Cek dari list sapaan (urut dari yang paling panjang dulu agar match yang spesifik)
+  const sorted = KATA_SAPAAN_LIST.slice().sort(function(a, b) { return b.length - a.length; });
+  for (let i = 0; i < sorted.length; i++) {
+    if (cocokKata(low, sorted[i])) return sorted[i];
+  }
+  return null;
+}
+
+const KATA_TERIMAKASIH = [
+  'terima kasih','terimakasih','makasih','thanks','thank you',
+  'thx','tq','ty','tengkyu','mksh','trims','trimakasih',
+];
+
+function isTerimakasih(low) {
+  return KATA_TERIMAKASIH.some(function(k) { return cocokKata(low, k); });
+}
+
+// ★★★ BALASAN SAPAAN PINTAR ★★★
+function balasSapaanPintar(sender, kataSapaan) {
+  const nama  = getNama(sender);
+  const waktu = getWaktu();
+  const dataSapa = SAPAAN_MAP[kataSapaan];
+  
+  if (!dataSapa) {
+    // Fallback umum
+    return (nama ? 'Halo, *' + nama + '*! 😊' : 'Halo! 😊');
+  }
+  
+  // Pilih balasan random dari kategori
+  const opsiBalasan = dataSapa.balasan;
+  let pilihan = opsiBalasan[Math.floor(Math.random() * opsiBalasan.length)];
+  
+  let respon = '';
+  
+  // Bangun respons berdasarkan kategori
+  if (dataSapa.kategori === 'waktu') {
+    // Cek apakah waktu sesuai dengan jam sekarang
+    if (dataSapa.waktu === waktu) {
+      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+    } else {
+      // Kalau user sapa "selamat pagi" padahal udah malam
+      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊\n_(Sekarang udah ' + waktu.toLowerCase() + ' loh)_';
+    }
+  } 
+  else if (dataSapa.kategori === 'islami') {
+    respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 🤲';
+  }
+  else if (dataSapa.kategori === 'english') {
+    if (dataSapa.waktu === waktu) {
+      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+    } else {
+      respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+    }
+  }
+  else if (dataSapa.kategori === 'sopan') {
+    respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 😊';
+  }
+  else {
+    // Kasual
+    respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
+  }
+  
+  return respon;
+}
+
+// ★★★ SAPAAN PERTAMA + MOTIVASI + TANYA KABAR ★★★
+function sapaanPertama(sender) {
+  const nama   = getNama(sender);
+  const waktu  = getWaktu();
+  const motiv  = KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
+  const kabar  = TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
+  
+  // Pilihan kata sambutan random
+  const sambutan = [
+    'Selamat ' + waktu,
+    'Halo, selamat ' + waktu,
+    'Hai, selamat ' + waktu,
+    'Halo',
+    'Hai',
+  ];
+  const sapa = sambutan[Math.floor(Math.random() * sambutan.length)];
+  
+  let pesan = sapa + (nama ? ', *' + nama + '*' : '') + '! 👋\n\n';
+  pesan += motiv + '\n\n';
+  pesan += kabar;
+  
+  return pesan;
+}
+
+// ★★★ SAPAAN BERIKUTNYA (dengan motivasi kadang-kadang) ★★★
+function sapaanBerikutnya(sender, kataSapaan) {
+  const balasan = balasSapaanPintar(sender, kataSapaan);
+  
+  // 30% kemungkinan tambah motivasi/tanya kabar
+  const rand = Math.random();
+  let tambahan = '';
+  
+  if (rand < 0.15) {
+    // 15% tambah motivasi
+    tambahan = '\n\n' + KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
+  } else if (rand < 0.30) {
+    // 15% tanya kabar
+    tambahan = '\n\n' + TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
+  }
+  
+  return balasan + tambahan;
+}
+
+function balasTerimakasih(sender) {
+  const nama = getNama(sender);
+  const n = nama ? ', *' + nama + '*' : '';
+  const opsi = [
+    'Sama-sama' + n + '! 😊',
+    'Dengan senang hati' + n + '! 😊',
+    'Tentu' + n + '! 😊',
+    'Iya, sama-sama' + n + '! 🙏',
+    'Senang bisa membantu' + n + '! ✨',
+    'You\'re welcome' + n + '! 😊',
+    'Yuk, kalau ada yang lain ketik *menu* ya' + n + '! 💪',
+  ];
+  return opsi[Math.floor(Math.random() * opsi.length)];
+}
+
+function isAdminCommand(low) {
+  if (['listmember','listkontak','reload','info'].indexOf(low) >= 0) return true;
+  return ADMIN_COMMANDS.some(function(cmd) { return low.startsWith(cmd + ' '); });
+}
 
 const KATA_TERIMAKASIH = [
   'terima kasih','terimakasih','makasih','thanks','thank you',
@@ -1334,12 +1568,11 @@ app.post('/webhook', async function(req, res) {
       }
     }
     
-    // ── SAPAAN ──
-    if (isSapaan(low)) {
-      const nama = getNama(sender);
-      const sl = nama ? 'Selamat ' + getWaktu() + ' juga, *' + nama + '*! 😊' : 'Selamat ' + getWaktu() + ' juga! 😊';
-      await kirimWA(sender, sl);
-      await tunggu(500);
+        // ── SAPAAN PINTAR ──
+    const kataSapaan = isSapaan(low);
+    if (kataSapaan) {
+      await kirimWA(sender, sapaanBerikutnya(sender, kataSapaan));
+      await tunggu(800);
       await kirimWA(sender, getMenuUtama(sender));
       return;
     }
