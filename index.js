@@ -1050,8 +1050,13 @@ function genLapPenjualanCP(text, kemarin) {
       }
     }
     
-    const valueStr = parts.slice(valueStart).join('').replace(/[^0-9]/g, '');
-    const value = parseFloat(valueStr) || 0;
+        // Cek apakah nilai = "-" atau "kosong"
+    const rawValue = parts.slice(valueStart).join(' ').trim();
+    let value = 0;
+    if (rawValue !== '-' && rawValue !== 'kosong' && rawValue !== 'null') {
+      const valueStr = rawValue.replace(/[^0-9]/g, '');
+      value = parseFloat(valueStr) || 0;
+    }
     
     if      (key === 'k1') { d.k1 = value; if (kasirNama) d.nk1 = kasirNama; }
     else if (key === 'k2') { d.k2 = value; if (kasirNama) d.nk2 = kasirNama; }
@@ -1311,13 +1316,24 @@ app.post('/webhook', async function(req, res) {
       if (handled) return;
     }
 
-    // ── RESET ──
+           // Cek state dulu (untuk handle reset cerdas)
+    const _sCheck = SESI[sender] || {};
+    const _lagiInput = _sCheck.menu && (_sCheck.kemarin !== undefined && _sCheck.kemarin !== null);
+    
+    // ── RESET (smart - tidak trigger saat input data) ──
     if (KATA_RESET.indexOf(low) >= 0) {
-      resetSesi(sender);
-      await kirimWA(sender, getMenuUtama(sender));
-      return;
+      // Kalau lagi input data dan ketik "0" doang, jangan reset
+      // (karena "0" bisa jadi nilai nominal)
+      if (_lagiInput && low === '0') {
+        // Skip reset, biarkan diproses sebagai input
+        log.info('WEBHOOK', 'Skip reset "0" karena lagi input data laporan');
+      } else {
+        resetSesi(sender);
+        await kirimWA(sender, getMenuUtama(sender));
+        return;
+      }
     }
-
+    
     // ── SAPAAN ──
     if (isSapaan(low)) {
       const nama = getNama(sender);
