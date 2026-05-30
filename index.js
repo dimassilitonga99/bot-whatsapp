@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 2.2 - Fix Admin Priority Bug
+//   Versi 2.3 - Fix Crash + Listmember Debug
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -98,10 +98,9 @@ const DEFAULT_KONTAK = {
   '6285829278962': 'Admin'
 };
 
-// Daftar perintah admin (dikenali tanpa case-sensitive)
 const ADMIN_COMMANDS = [
   'daftar', 'hapus', 'listmember', 'namakontak', 'hapuskontak',
-  'listkontak', 'reload', 'info', 'broadcast'
+  'listkontak', 'reload', 'info'
 ];
 
 // ════════════════════════════════════════════════════════════════
@@ -154,8 +153,8 @@ function formatRp(n, prefix, fallback) {
 const fRp  = function(n) { return formatRp(n, 'Rp',  'Rp -');  };
 const fRpP = function(n) { return formatRp(n, 'Rp',  'Rp 0');  };
 
-const GARIS_TEBAL = '━━━━━━━━━━━━━━━━━━';
-const GARIS_TIPIS = '──────────────────';
+const GARIS_TEBAL = '------------------';
+const GARIS_TIPIS = '. . . . . . . . . .';
 
 // ════════════════════════════════════════════════════════════════
 //   5. STORAGE
@@ -200,7 +199,7 @@ function tambahMember(nomor) {
   if (isAdmin(nomor))                    return { ok: false, alasan: 'Nomor itu adalah admin' };
   if (MEMBERS.indexOf(nomor) >= 0)       return { ok: false, alasan: 'Nomor sudah terdaftar' };
   if (MEMBERS.length >= CONFIG.maxMember) {
-    return { ok: false, alasan: 'Slot member penuh (' + CONFIG.maxMember + '/' + CONFIG.maxMember + '). Hapus member lama dulu.' };
+    return { ok: false, alasan: 'Slot member penuh (' + CONFIG.maxMember + '/' + CONFIG.maxMember + ')' };
   }
   MEMBERS.push(nomor);
   saveJSON(CONFIG.paths.members, MEMBERS);
@@ -560,19 +559,22 @@ function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 async function kirimWA(target, message, retry) {
   retry = retry || 0;
   try {
-    await axios.post(
+    const resp = await axios.post(
       CONFIG.fonnteUrl,
       { target: target, message: message },
       { headers: { Authorization: CONFIG.fonnteToken }, timeout: 10000 }
     );
+    log.info('FONNTE', 'OK ke ' + target + ' (msg ' + message.length + ' chars)');
     return true;
   } catch (err) {
-    log.warn('FONNTE', 'Gagal kirim ke ' + target + ' (attempt ' + (retry + 1) + ')');
+    const status = err.response ? err.response.status : 'NETWORK';
+    const data   = err.response ? JSON.stringify(err.response.data) : err.message;
+    log.warn('FONNTE', 'Gagal kirim ke ' + target + ' (' + status + ') attempt ' + (retry + 1) + ': ' + data);
     if (retry < CONFIG.maxRetry - 1) {
       await tunggu(CONFIG.retryDelay);
       return kirimWA(target, message, retry + 1);
     }
-    log.error('FONNTE', 'Gagal kirim ke ' + target + ' setelah ' + CONFIG.maxRetry + 'x', err.message);
+    log.error('FONNTE', 'GAGAL TOTAL ke ' + target, data);
     return false;
   }
 }
@@ -607,7 +609,7 @@ function buatPromptAI(menuType, namaToko, tanggal) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   10. SAPAAN & TERIMA KASIH
+//   10. SAPAAN
 // ════════════════════════════════════════════════════════════════
 
 const KATA_SAPAAN = [
@@ -665,22 +667,15 @@ function balasTerimakasih(sender) {
   return opsi[Math.floor(Math.random() * opsi.length)];
 }
 
-// ════════════════════════════════════════════════════════════════
-//   11. CEK APAKAH PERINTAH ADMIN (PENTING!)
-// ════════════════════════════════════════════════════════════════
-
 function isAdminCommand(low) {
-  // Cek perintah single word (listmember, listkontak, reload, info)
   if (['listmember','listkontak','reload','info'].indexOf(low) >= 0) return true;
-  
-  // Cek perintah dengan parameter (daftar 628xxx, hapus 628xxx, dll)
   return ADMIN_COMMANDS.some(function(cmd) {
     return low.startsWith(cmd + ' ');
   });
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. MENU & PROMPT
+//   11. MENU & PROMPT
 // ════════════════════════════════════════════════════════════════
 
 function getMenu(nomor) {
@@ -700,15 +695,15 @@ function getMenu(nomor) {
   }
 
   if (isAdmin(nomor)) {
-    m += '\n\n👑 *Perintah Admin:*\n' +
+    m += '\n\n*Perintah Admin:*\n' +
       '• _daftar 628xxx_\n' +
       '• _hapus 628xxx_\n' +
       '• _listmember_\n' +
       '• _namakontak 628xxx Nama_\n' +
       '• _hapuskontak 628xxx_\n' +
       '• _listkontak_\n' +
-      '• _reload_ — reload Excel\n' +
-      '• _info_ — info sistem';
+      '• _reload_\n' +
+      '• _info_';
   }
   return m;
 }
@@ -723,7 +718,6 @@ function msgSiapCari(nm) {
   return '🔍 *Cari Harga Barang*\n🏦 *' + nm + '*\n' + GARIS_TEBAL +
     '\nKetik nama atau kode barang:\n\n' +
     '• _dandang eagle 20_\n• _NN00001_\n• _golden sunkist_\n\n' +
-    '_Bot akan otomatis mencari kata yang mirip_\n_jika terjadi typo atau salah eja._\n\n' +
     'Balas *0* untuk kembali.';
 }
 
@@ -756,7 +750,7 @@ function msgSiapInput(nm, kemarin, menuType) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   13. FORMAT HASIL CARI
+//   12. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
@@ -775,7 +769,7 @@ function formatHasil(searchResult, tokoKode, sender) {
       '💡 *Tips:*\n' +
       '• Gunakan kata kunci lebih singkat\n' +
       '• Cari by kode (contoh: _NN00001_)\n' +
-      '• Hilangkan tanda khusus (titik, strip, dll)\n' +
+      '• Hilangkan tanda khusus\n' +
       '• Periksa ejaan kata kunci';
   }
 
@@ -809,25 +803,16 @@ function formatHasil(searchResult, tokoKode, sender) {
       '💰 *Harga Ambil* : ' + fRp(h.ambil) + '\n' +
       '📊 *Stok*        : ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n' +
       GARIS_TEBAL;
-    
-    if (tipeHasil === 'fuzzy') {
-      msg += '\n\n💡 _Hasil koreksi otomatis dari kata kunci kamu_';
-    }
+    if (tipeHasil === 'fuzzy') msg += '\n\n💡 _Hasil koreksi otomatis_';
     return msg + suffix;
   }
 
-  let header = '';
-  if (totalDitemukan > CONFIG.maxHasilCari) {
-    header = '🔍 *Menampilkan ' + items.length + ' dari ' + totalDitemukan + ' Barang*\n';
-  } else {
-    header = '🔍 *Ditemukan ' + items.length + ' Barang*\n';
-  }
+  let header = totalDitemukan > CONFIG.maxHasilCari
+    ? '🔍 *Menampilkan ' + items.length + ' dari ' + totalDitemukan + ' Barang*\n'
+    : '🔍 *Ditemukan ' + items.length + ' Barang*\n';
   
   let msg = header + '🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
-  
-  if (tipeHasil === 'fuzzy') {
-    msg += '💡 _Hasil koreksi otomatis dari kata kunci kamu_\n\n';
-  }
+  if (tipeHasil === 'fuzzy') msg += '💡 _Hasil koreksi otomatis_\n\n';
   
   items.forEach(function(d, i) {
     const h = d.harga[tokoKode];
@@ -839,17 +824,15 @@ function formatHasil(searchResult, tokoKode, sender) {
   });
   
   msg += GARIS_TEBAL;
-  
   if (totalDitemukan > CONFIG.maxHasilCari) {
     msg += '\n\n⚠️ Masih ada *' + (totalDitemukan - CONFIG.maxHasilCari) + '* barang lainnya.\n';
-    msg += 'Coba kata kunci lebih spesifik untuk mempersempit hasil.';
+    msg += 'Coba kata kunci lebih spesifik.';
   }
-  
   return msg + suffix;
 }
 
 // ════════════════════════════════════════════════════════════════
-//   14. GENERATOR LAPORAN
+//   13. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin) {
@@ -938,8 +921,8 @@ function genLapMarket(text, kemarin) {
     d.nota.forEach(function(n) { nt += '- Nomor Nota ' + n + '\n'; });
   }
 
-  return '━━━━━━━━━━━━━━━━━━━━━━\n🛒 *Total Penjualan Marketplace*\n*Perabot Mama*\n📅 Periode ' + t + k +
-    '\n━━━━━━━━━━━━━━━━━━━━━━\n🏦 *Per Toko*\n' +
+  return GARIS_TEBAL + '\n🛒 *Total Penjualan Marketplace*\n*Perabot Mama*\n📅 Periode ' + t + k +
+    '\n' + GARIS_TEBAL + '\n🏦 *Per Toko*\n' +
     '• Toko Perabot Mama Oesapa : ' + fRp(d.oesapa)  + '\n' +
     '• Toko Perabot Mama TDM    : ' + fRp(d.tdm)     + '\n' +
     '• Toko Central Perabot     : ' + fRp(d.central) + '\n' +
@@ -954,42 +937,42 @@ function genLapMarket(text, kemarin) {
     '• Tunai/CASH : ' + fRp(d.tunai)  + '\n' +
     '• Debit/TF   : ' + fRp(d.debit)  + '\n' +
     '• Credit     : ' + fRp(d.kredit) + '\n' +
-    '━━━━━━━━━━━━━━━━━━━━━━\n' + nt + '_Laporan otomatis_';
+    GARIS_TEBAL + '\n' + nt + '_Laporan otomatis_';
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. HANDLER ADMIN
+//   14. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
+  log.info('ADMIN', 'Cmd dari ' + sender + ': ' + low);
+
   if (low.startsWith('daftar ')) {
     const nomor = msg.substring(7).trim().replace(/[^0-9]/g, '');
-    if (!nomor) { await kirimWA(sender, '⚠️ Format: _daftar 6281234567890_'); return true; }
+    if (!nomor) { await kirimWA(sender, 'Format: daftar 6281234567890'); return true; }
     const r = tambahMember(nomor);
-    if (!r.ok) { await kirimWA(sender, '⚠️ Gagal: ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ *Member Terdaftar!*\n' + GARIS_TEBAL +
-      '\n📱 Nomor: *' + nomor + '*\n👤 Nama: ' + (getNama(nomor) || '(belum ada)') +
-      '\n👥 Total: ' + MEMBERS.length + '/' + CONFIG.maxMember +
-      '\n📊 Slot tersisa: *' + (CONFIG.maxMember - MEMBERS.length) + '* perangkat');
+    if (!r.ok) { await kirimWA(sender, 'Gagal: ' + r.alasan); return true; }
+    await kirimWA(sender, 'Member terdaftar!\n' +
+      'Nomor: ' + nomor + '\n' +
+      'Nama: ' + (getNama(nomor) || '(belum ada)') + '\n' +
+      'Total: ' + MEMBERS.length + '/' + CONFIG.maxMember + '\n' +
+      'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length));
     return true;
   }
 
   if (low.startsWith('hapus ')) {
     const nomor = msg.substring(6).trim().replace(/[^0-9]/g, '');
     const r = hapusMember(nomor);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ Member *' + nomor + '* dihapus!\n👥 Total: ' + MEMBERS.length + '/' + CONFIG.maxMember +
-      '\n📊 Slot tersisa: *' + (CONFIG.maxMember - MEMBERS.length) + '* perangkat');
+    if (!r.ok) { await kirimWA(sender, r.alasan); return true; }
+    await kirimWA(sender, 'Member ' + nomor + ' dihapus!\nTotal: ' + MEMBERS.length + '/' + CONFIG.maxMember);
     return true;
   }
 
-    if (low === 'listmember') {
+  if (low === 'listmember') {
     try {
-      log.info('ADMIN', 'Listmember dipanggil oleh ' + sender);
-      log.info('ADMIN', 'MEMBERS array: ' + JSON.stringify(MEMBERS));
-      log.info('ADMIN', 'KONTAK keys: ' + Object.keys(KONTAK).length);
+      log.info('ADMIN', 'listmember mulai, MEMBERS.length=' + MEMBERS.length);
       
-      let m = '*Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')*\n';
+      let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n';
       m += '------------------\n';
       
       if (MEMBERS.length === 0) {
@@ -998,72 +981,76 @@ async function handleAdmin(sender, msg, low) {
         for (let i = 0; i < MEMBERS.length; i++) {
           const nomor = MEMBERS[i];
           const nama  = KONTAK[nomor] || '(belum ada nama)';
-          m += (i + 1) + '. ' + nomor + '\n';
-          m += '   ' + nama + '\n';
+          m += (i + 1) + '. ' + nomor + ' - ' + nama + '\n';
         }
       }
       
       m += '------------------\n';
       m += 'Admin: ' + CONFIG.adminNumber + '\n';
-      m += 'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length) + ' perangkat';
+      m += 'Slot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
       
-      log.info('ADMIN', 'Listmember msg length: ' + m.length);
-      
-      const sukses = await kirimWA(sender, m);
-      log.info('ADMIN', 'Listmember kirim status: ' + sukses);
+      log.info('ADMIN', 'listmember msg length: ' + m.length);
+      const ok = await kirimWA(sender, m);
+      log.info('ADMIN', 'listmember kirim hasil: ' + ok);
     } catch (e) {
-      log.error('ADMIN', 'Listmember error', e.message);
+      log.error('ADMIN', 'listmember crash', e.message);
       await kirimWA(sender, 'Error listmember: ' + e.message);
     }
     return true;
   }
-  }
 
   if (low.startsWith('namakontak ')) {
     const p = msg.substring(11).trim().split(/\s+/);
-    if (p.length < 2) { await kirimWA(sender, '⚠️ Format: _namakontak 628xxx Nama_'); return true; }
+    if (p.length < 2) { await kirimWA(sender, 'Format: namakontak 628xxx Nama'); return true; }
     const nomor = p[0].replace(/[^0-9]/g, '');
     const nama  = p.slice(1).join(' ');
     const r = setNama(nomor, nama);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ *Nama Disimpan!*\n📱 ' + nomor + '\n👤 ' + nama);
+    if (!r.ok) { await kirimWA(sender, r.alasan); return true; }
+    await kirimWA(sender, 'Nama disimpan!\n' + nomor + '\n' + nama);
     return true;
   }
 
   if (low.startsWith('hapuskontak ')) {
     const nomor = msg.substring(12).trim().replace(/[^0-9]/g, '');
     const r = hapusKontak(nomor);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ Kontak *' + nomor + '* dihapus!');
+    if (!r.ok) { await kirimWA(sender, r.alasan); return true; }
+    await kirimWA(sender, 'Kontak ' + nomor + ' dihapus!');
     return true;
   }
 
   if (low === 'listkontak') {
-    const keys = Object.keys(KONTAK);
-    let m = '📒 *Daftar Kontak (' + keys.length + '):*\n' + GARIS_TEBAL + '\n';
-    keys.forEach(function(k, i) { m += (i + 1) + '. ' + k + '\n   👤 ' + KONTAK[k] + '\n'; });
-    await kirimWA(sender, m);
+    try {
+      const keys = Object.keys(KONTAK);
+      let m = 'Daftar Kontak (' + keys.length + ')\n';
+      m += '------------------\n';
+      keys.forEach(function(k, i) { m += (i + 1) + '. ' + k + ' - ' + KONTAK[k] + '\n'; });
+      await kirimWA(sender, m);
+    } catch (e) {
+      log.error('ADMIN', 'listkontak crash', e.message);
+      await kirimWA(sender, 'Error: ' + e.message);
+    }
     return true;
   }
 
   if (low === 'reload') {
     const ok = loadExcel();
     await kirimWA(sender, ok
-      ? '✅ Excel di-reload!\n📦 Total: *' + DATA_BARANG.length + ' item*'
-      : '❌ Gagal reload, cek log.');
+      ? 'Excel di-reload! Total: ' + DATA_BARANG.length + ' item'
+      : 'Gagal reload, cek log.');
     return true;
   }
 
   if (low === 'info') {
     const up = Math.floor(process.uptime());
     const jam = Math.floor(up / 3600), mnt = Math.floor((up % 3600) / 60), dtk = up % 60;
-    await kirimWA(sender, '🤖 *Info Sistem*\n' + GARIS_TEBAL +
-      '\n⏱️ Uptime: ' + jam + 'j ' + mnt + 'm ' + dtk + 'd' +
-      '\n👥 Member: ' + MEMBERS.length + '/' + CONFIG.maxMember +
-      '\n📦 Data: ' + DATA_BARANG.length + ' item' +
-      '\n📒 Kontak: ' + Object.keys(KONTAK).length +
-      '\n💬 Sesi aktif: ' + Object.keys(SESI).length +
-      '\n💾 Node: ' + process.version);
+    await kirimWA(sender, 'Info Sistem\n' +
+      '------------------\n' +
+      'Uptime: ' + jam + 'j ' + mnt + 'm ' + dtk + 'd\n' +
+      'Member: ' + MEMBERS.length + '/' + CONFIG.maxMember + '\n' +
+      'Data: ' + DATA_BARANG.length + ' item\n' +
+      'Kontak: ' + Object.keys(KONTAK).length + '\n' +
+      'Sesi aktif: ' + Object.keys(SESI).length + '\n' +
+      'Node: ' + process.version);
     return true;
   }
 
@@ -1071,7 +1058,7 @@ async function handleAdmin(sender, msg, low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   16. ROUTES & DEBUG
+//   15. ROUTES & DEBUG
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
@@ -1093,6 +1080,8 @@ app.get('/reload', function(req, res) {
 app.get('/debug', function(req, res) {
   res.json({
     total: DATA_BARANG.length,
+    members: MEMBERS,
+    kontak: KONTAK,
     contoh_5_pertama: DATA_BARANG.slice(0, 5),
   });
 });
@@ -1104,19 +1093,13 @@ app.get('/debug/:kode', function(req, res) {
   res.json(item);
 });
 
-app.get('/search/:kw', function(req, res) {
-  const hasil = cariBarang(req.params.kw);
-  res.json(hasil);
-});
-
-// Reset sesi user tertentu (untuk debug)
 app.get('/resetsesi/:nomor', function(req, res) {
   resetSesi(req.params.nomor);
   res.json({ ok: true, msg: 'Sesi ' + req.params.nomor + ' direset' });
 });
 
 // ════════════════════════════════════════════════════════════════
-//   17. WEBHOOK UTAMA (LOGIC URUTAN DIPERBAIKI!)
+//   16. WEBHOOK UTAMA
 // ════════════════════════════════════════════════════════════════
 
 const KATA_RESET = ['0', 'batal', 'menu', 'mulai', 'start', 'kembali'];
@@ -1137,9 +1120,6 @@ app.post('/webhook', async function(req, res) {
 
     log.info('WEBHOOK', 'Pesan dari ' + sender + ': ' + msg.substring(0, 50));
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 1: SAPAAN PERTAMA (untuk user baru)
-    // ═══════════════════════════════════════════════════
     if (!SUDAH_DISAPA[sender]) {
       SUDAH_DISAPA[sender] = true;
       saveJSON(CONFIG.paths.disapa, SUDAH_DISAPA);
@@ -1148,13 +1128,8 @@ app.post('/webhook', async function(req, res) {
       if (trigger.indexOf(low) === -1) return;
     }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 2: PERINTAH ADMIN (SELALU diutamakan!)
-    // Bahkan saat user lagi mode cari atau laporan
-    // ═══════════════════════════════════════════════════
     if (isAdmin(sender) && isAdminCommand(low)) {
       log.info('WEBHOOK', 'Admin command terdeteksi: ' + low);
-      // Reset sesi dulu supaya tidak nyangkut
       if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu)) {
         resetSesi(sender);
       }
@@ -1162,55 +1137,40 @@ app.post('/webhook', async function(req, res) {
       if (handled) return;
     }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 3: RESET / MENU
-    // ═══════════════════════════════════════════════════
     if (KATA_RESET.indexOf(low) >= 0) {
       resetSesi(sender);
       await kirimWA(sender, getMenu(sender));
       return;
     }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 4: SAPAAN & TERIMA KASIH
-    // ═══════════════════════════════════════════════════
     if (isSapaan(low))      { await kirimWA(sender, balasSapaan(sender));      return; }
     if (isTerimakasih(low)) { await kirimWA(sender, balasTerimakasih(sender)); return; }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 5: CEK AKSES untuk fitur member
-    // ═══════════════════════════════════════════════════
     if ((low.startsWith('cari ') || low.startsWith('stok ')) && !isMember(sender)) {
-      await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member terdaftar.\n\nHubungi admin untuk mendaftar.');
+      await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member terdaftar.');
       return;
     }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 6: UPDATE STOK
-    // ═══════════════════════════════════════════════════
     if (low.startsWith('stok ') && isMember(sender)) {
       const p = msg.substring(5).trim().split(/\s+/);
       if (p.length < 3) {
-        await kirimWA(sender, '⚠️ Format: _stok [toko] [kode] [jumlah]_\nContoh: _stok nk NN00001 10_\n\nKode: nk / tdm / oesapa / kefa / cp');
+        await kirimWA(sender, 'Format: stok [toko] [kode] [jumlah]\nContoh: stok nk NN00001 10');
         return;
       }
       const tk = p[0].toLowerCase(), kd = p[1], jm = parseInt(p[2]);
-      if (!TOKO_COLS[tk])         { await kirimWA(sender, '❌ Kode toko tidak valid (nk/tdm/oesapa/kefa/cp)'); return; }
-      if (isNaN(jm) || jm < 0)    { await kirimWA(sender, '❌ Jumlah harus angka positif'); return; }
+      if (!TOKO_COLS[tk])         { await kirimWA(sender, 'Kode toko tidak valid'); return; }
+      if (isNaN(jm) || jm < 0)    { await kirimWA(sender, 'Jumlah harus angka positif'); return; }
       const item = updateStok(kd, tk, jm);
-      if (!item)                  { await kirimWA(sender, '❌ Kode *' + kd + '* tidak ditemukan'); return; }
-      await kirimWA(sender, '✅ *Stok Diperbarui!*\n' + GARIS_TEBAL +
-        '\n🏦 ' + NAMA_TOKO[tk] + '\n🔖 ' + item.kode + '\n📦 ' + item.nama +
-        '\n📊 Stok baru: *' + jm + ' ' + item.satuan + '*');
+      if (!item)                  { await kirimWA(sender, 'Kode ' + kd + ' tidak ditemukan'); return; }
+      await kirimWA(sender, 'Stok diperbarui!\n' +
+        NAMA_TOKO[tk] + '\n' + item.kode + '\n' + item.nama +
+        '\nStok baru: ' + jm + ' ' + item.satuan);
       return;
     }
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 7: CARI LANGSUNG (dengan "cari ")
-    // ═══════════════════════════════════════════════════
     if (low.startsWith('cari ')) {
       const kw = msg.substring(5).trim();
-      if (!kw) { await kirimWA(sender, '⚠️ Contoh: _cari dandang eagle 20_'); return; }
+      if (!kw) { await kirimWA(sender, 'Contoh: cari dandang eagle 20'); return; }
       const s = getSesi(sender);
       if (s.mode === 'cari' && s.tokoKode) {
         await kirimWA(sender, formatHasil(cariBarang(kw), s.tokoKode, sender));
@@ -1223,11 +1183,6 @@ app.post('/webhook', async function(req, res) {
 
     const s = getSesi(sender);
 
-    // ═══════════════════════════════════════════════════
-    // PRIORITAS 8: ALUR SESI (mode cari & laporan)
-    // ═══════════════════════════════════════════════════
-    
-    // MODE CARI: pilih toko
     if (s.mode === 'cari' && !s.tokoKode) {
       const idx = parseInt(msg) - 1;
       if (idx >= 0 && idx < TOKO_LIST.length && !isNaN(idx)) {
@@ -1238,7 +1193,7 @@ app.post('/webhook', async function(req, res) {
           updateSesi(sender, { pendingKw: null });
           await kirimWA(sender, formatHasil(cariBarang(kw), toko.kode, sender));
           setTimeout(async function() {
-            await kirimWA(sender, '🔍 Cari lagi di *' + toko.nama + '*?\nKetik nama/kode atau *0* kembali ke menu.');
+            await kirimWA(sender, 'Cari lagi di ' + toko.nama + '?\nKetik nama/kode atau 0 kembali.');
           }, 800);
         } else {
           await kirimWA(sender, msgSiapCari(toko.nama));
@@ -1249,17 +1204,15 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // MODE CARI: terima keyword
     if (s.mode === 'cari' && s.tokoKode) {
       if (!msg) return;
       await kirimWA(sender, formatHasil(cariBarang(msg), s.tokoKode, sender));
       setTimeout(async function() {
-        await kirimWA(sender, '🔍 Cari lagi di *' + NAMA_TOKO[s.tokoKode] + '*?\nKetik nama/kode atau *0* kembali ke menu.');
+        await kirimWA(sender, 'Cari lagi di ' + NAMA_TOKO[s.tokoKode] + '?\nKetik nama/kode atau 0 kembali.');
       }, 800);
       return;
     }
 
-    // LEVEL 1: Pilih menu
     if (!s.menu) {
       if (msg === '1' || msg === '2') {
         updateSesi(sender, { menu: parseInt(msg) });
@@ -1273,7 +1226,7 @@ app.post('/webhook', async function(req, res) {
       }
       if (msg === '4') {
         if (!isMember(sender)) {
-          await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member.');
+          await kirimWA(sender, '🚫 Akses Ditolak\n\nFitur ini hanya untuk member.');
           return;
         }
         resetSesi(sender);
@@ -1281,11 +1234,10 @@ app.post('/webhook', async function(req, res) {
         await kirimWA(sender, MSG_PILIH_TOKO_CARI);
         return;
       }
-      await kirimWA(sender, '🤔 Maaf, saya tidak mengerti pesan tersebut.\n\nKetik *menu* untuk melihat pilihan.');
+      await kirimWA(sender, '🤔 Maaf, saya tidak mengerti.\n\nKetik *menu* untuk melihat pilihan.');
       return;
     }
 
-    // LEVEL 2: Pilih toko (menu 1 & 2)
     if (s.menu !== 3 && !s.toko) {
       const idx = parseInt(msg) - 1;
       if (idx >= 0 && idx < TOKO_LIST.length && !isNaN(idx)) {
@@ -1297,7 +1249,6 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // LEVEL 3: Pilih hari
     if (s.kemarin === undefined || s.kemarin === null) {
       let kem;
       if (msg === '1') kem = false;
@@ -1313,7 +1264,6 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // LEVEL 4: Terima data / foto
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
 
@@ -1353,27 +1303,24 @@ app.post('/webhook', async function(req, res) {
       if (sender) {
         await kirimWA(sender, '⚠️ Terjadi kesalahan sistem. Coba lagi atau ketik *menu*.');
       }
-      await kirimWA(CONFIG.adminNumber, '🚨 *Bot Error*\n' + GARIS_TEBAL +
-        '\n📍 WEBHOOK\n❌ ' + err.message + '\n🕐 ' + new Date().toLocaleString('id-ID'));
     } catch (e) {}
   }
 });
 
 // ════════════════════════════════════════════════════════════════
-//   18. START SERVER
+//   17. START SERVER
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
-  console.log('\n═══════════════════════════════════════');
-  console.log('  ' + CONFIG.appName + ' v2.2');
-  console.log('═══════════════════════════════════════');
-  console.log('  ✅ Status      : AKTIF');
-  console.log('  🌐 Port        : ' + CONFIG.port);
-  console.log('  👑 Admin       : ' + CONFIG.adminNumber);
-  console.log('  📦 Items       : ' + DATA_BARANG.length);
-  console.log('  👥 Members     : ' + MEMBERS.length + '/' + CONFIG.maxMember);
-  console.log('  🔍 Max hasil   : ' + CONFIG.maxHasilCari);
-  console.log('═══════════════════════════════════════\n');
+  console.log('\n===================================');
+  console.log('  ' + CONFIG.appName + ' v2.3');
+  console.log('===================================');
+  console.log('  Status   : AKTIF');
+  console.log('  Port     : ' + CONFIG.port);
+  console.log('  Admin    : ' + CONFIG.adminNumber);
+  console.log('  Items    : ' + DATA_BARANG.length);
+  console.log('  Members  : ' + MEMBERS.length + '/' + CONFIG.maxMember);
+  console.log('===================================\n');
 });
 
 process.on('uncaughtException',  function(e) { log.error('SYSTEM', 'Uncaught',   e.message); });
