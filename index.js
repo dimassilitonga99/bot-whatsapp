@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 3.5 - Wizard Mode Input Step-by-Step
+//   Versi 3.6 - Auto Wizard + Auto Nama Kasir CP
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -59,7 +59,7 @@ if (!CONFIG.fonnteToken || !CONFIG.geminiKey) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   2. EMOJI ANGKA & DATA TOKO
+//   2. EMOJI & DATA TOKO
 // ════════════════════════════════════════════════════════════════
 
 const EMOJI_NUM = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
@@ -87,52 +87,66 @@ TOKO_LIST.forEach(function(t) { NAMA_TOKO[t.kode] = t.nama; });
 // ★★★ FIELD WIZARD per TOKO ★★★
 const FIELD_LAPORAN = {
   nk: [
-    { key: 'k1',     label: 'Kassa 1',  emoji: '💵', kategori: 'kassa' },
-    { key: 'k2',     label: 'Kassa 2',  emoji: '💵', kategori: 'kassa' },
-    { key: 'tunai',  label: 'Tunai',    emoji: '💰', kategori: 'bayar' },
-    { key: 'debit',  label: 'Debit',    emoji: '💳', kategori: 'bayar' },
-    { key: 'kredit', label: 'Credit',   emoji: '💳', kategori: 'bayar' },
-    { key: 'ecer',   label: 'Ecer',     emoji: '🛒', kategori: 'jenis' },
-    { key: 'grosir', label: 'Grosir',   emoji: '📦', kategori: 'jenis' },
+    { key: 'k1',     label: 'Kassa 1',               emoji: '💵' },
+    { key: 'k2',     label: 'Kassa 2',               emoji: '💵' },
+    { key: 'total',  label: 'Total Keseluruhan',     emoji: '📦', auto: true },
+    { key: 'tunai',  label: 'Tunai',                 emoji: '💰' },
+    { key: 'debit',  label: 'Debit',                 emoji: '💳' },
+    { key: 'kredit', label: 'Credit',                emoji: '💳' },
+    { key: 'ecer',   label: 'Ecer',                  emoji: '🛒' },
+    { key: 'grosir', label: 'Grosir',                emoji: '📦' },
   ],
   tdm: [
-    { key: 'k1',     label: 'Kassa 1',  emoji: '💵', kategori: 'kassa' },
-    { key: 'k2',     label: 'Kassa 2',  emoji: '💵', kategori: 'kassa' },
-    { key: 'tunai',  label: 'Tunai',    emoji: '💰', kategori: 'bayar' },
-    { key: 'debit',  label: 'Debit',    emoji: '💳', kategori: 'bayar' },
-    { key: 'kredit', label: 'Credit',   emoji: '💳', kategori: 'bayar' },
+    { key: 'k1',     label: 'Kassa 1',               emoji: '💵' },
+    { key: 'k2',     label: 'Kassa 2',               emoji: '💵' },
+    { key: 'total',  label: 'Total Keseluruhan',     emoji: '📦', auto: true },
+    { key: 'tunai',  label: 'Tunai',                 emoji: '💰' },
+    { key: 'debit',  label: 'Debit',                 emoji: '💳' },
+    { key: 'kredit', label: 'Credit',                emoji: '💳' },
   ],
   oesapa: [
-    { key: 'k1',     label: 'Kassa 1',  emoji: '💵', kategori: 'kassa' },
-    { key: 'k2',     label: 'Kassa 2',  emoji: '💵', kategori: 'kassa' },
-    { key: 'tunai',  label: 'Tunai',    emoji: '💰', kategori: 'bayar' },
-    { key: 'debit',  label: 'Debit',    emoji: '💳', kategori: 'bayar' },
-    { key: 'kredit', label: 'Credit',   emoji: '💳', kategori: 'bayar' },
+    { key: 'k1',     label: 'Kassa 1',               emoji: '💵' },
+    { key: 'k2',     label: 'Kassa 2',               emoji: '💵' },
+    { key: 'total',  label: 'Total Keseluruhan',     emoji: '📦', auto: true },
+    { key: 'tunai',  label: 'Tunai',                 emoji: '💰' },
+    { key: 'debit',  label: 'Debit',                 emoji: '💳' },
+    { key: 'kredit', label: 'Credit',                emoji: '💳' },
   ],
   kefa: [
-    { key: 'k1',     label: 'Kassa 1',  emoji: '💵', kategori: 'kassa' },
-    { key: 'k2',     label: 'Kassa 2',  emoji: '💵', kategori: 'kassa' },
-    { key: 'tunai',  label: 'Tunai',    emoji: '💰', kategori: 'bayar' },
-    { key: 'debit',  label: 'Debit',    emoji: '💳', kategori: 'bayar' },
-    { key: 'kredit', label: 'Credit',   emoji: '💳', kategori: 'bayar' },
+    { key: 'k1',     label: 'Kassa 1',               emoji: '💵' },
+    { key: 'k2',     label: 'Kassa 2',               emoji: '💵' },
+    { key: 'total',  label: 'Total Keseluruhan',     emoji: '📦', auto: true },
+    { key: 'tunai',  label: 'Tunai',                 emoji: '💰' },
+    { key: 'debit',  label: 'Debit',                 emoji: '💳' },
+    { key: 'kredit', label: 'Credit',                emoji: '💳' },
   ],
   cp: [
-    { key: 'k1', label: 'Kassa 1', emoji: '💵', kategori: 'kassa', tanyaNama: true },
-    { key: 'k2', label: 'Kassa 2', emoji: '💵', kategori: 'kassa', tanyaNama: true },
-    { key: 'k3', label: 'Kassa 3', emoji: '💵', kategori: 'kassa', tanyaNama: true },
-    { key: 'k4', label: 'Kassa 4', emoji: '💵', kategori: 'kassa', tanyaNama: true },
-    { key: 'tunai',  label: 'Tunai',  emoji: '💰', kategori: 'bayar' },
-    { key: 'debit',  label: 'Debit',  emoji: '💳', kategori: 'bayar' },
-    { key: 'kredit', label: 'Credit', emoji: '💳', kategori: 'bayar' },
-    { key: 'ecer',   label: 'Ecer',   emoji: '🛒', kategori: 'jenis' },
-    { key: 'grosir', label: 'Grosir', emoji: '📦', kategori: 'jenis' },
-    { key: 'promo',        label: 'Total Kasir Promo',  emoji: '🎁', kategori: 'promo' },
-    { key: 'promotunai',   label: 'Promo - Tunai',      emoji: '💰', kategori: 'promo' },
-    { key: 'promodebit',   label: 'Promo - Debit',      emoji: '💳', kategori: 'promo' },
-    { key: 'promokredit',  label: 'Promo - Credit',     emoji: '💳', kategori: 'promo' },
-    { key: 'parkirkomputer', label: 'Parkir di Komputer', emoji: '🅿️', kategori: 'parkir' },
-    { key: 'parkirluar',     label: 'Parkir Stor Luar',   emoji: '🅿️', kategori: 'parkir' },
+    { key: 'k1', label: 'Kassa 1', emoji: '💵' },
+    { key: 'k2', label: 'Kassa 2', emoji: '💵' },
+    { key: 'k3', label: 'Kassa 3', emoji: '💵' },
+    { key: 'k4', label: 'Kassa 4', emoji: '💵' },
+    { key: 'total',  label: 'Total Keseluruhan',     emoji: '📦', auto: true },
+    { key: 'tunai',  label: 'Tunai',                 emoji: '💰' },
+    { key: 'debit',  label: 'Debit',                 emoji: '💳' },
+    { key: 'kredit', label: 'Credit',                emoji: '💳' },
+    { key: 'ecer',   label: 'Ecer',                  emoji: '🛒' },
+    { key: 'grosir', label: 'Grosir',                emoji: '📦' },
+    { key: 'promo',        label: 'Total Kasir Promo',  emoji: '🎁' },
+    { key: 'promotunai',   label: 'Promo - Tunai',      emoji: '💰' },
+    { key: 'promodebit',   label: 'Promo - Debit',      emoji: '💳' },
+    { key: 'promokredit',  label: 'Promo - Credit',     emoji: '💳' },
+    { key: 'parkirkomputer', label: 'Parkir di Komputer', emoji: '🅿️' },
+    { key: 'parkirluar',     label: 'Parkir Stor Luar',   emoji: '🅿️' },
   ],
+};
+
+// ★★★ NAMA KASIR DEFAULT CENTRAL PERABOT ★★★
+// Ganti nama-nama ini sesuai kasir asli kamu
+const KASIR_CP_DEFAULT = {
+  k1: 'Yuni-Salsa',
+  k2: 'Nanda-Umi-Marselina',
+  k3: 'Febri-Jien-Tika',
+  k4: 'Delfi-Tirsa',
 };
 
 const DEFAULT_MEMBERS = [
@@ -269,7 +283,7 @@ setInterval(function() {
 }, 5 * 60 * 1000);
 
 // ════════════════════════════════════════════════════════════════
-//   5. EXCEL
+//   5. EXCEL & SMART SEARCH
 // ════════════════════════════════════════════════════════════════
 
 let DATA_BARANG = [];
@@ -341,10 +355,6 @@ function saveExcel() {
     return true;
   } catch (e) { log.error('EXCEL', 'Gagal save', e.message); return false; }
 }
-
-// ════════════════════════════════════════════════════════════════
-//   6. SMART SEARCH
-// ════════════════════════════════════════════════════════════════
 
 function levenshtein(a, b) {
   if (a.length === 0) return b.length;
@@ -455,7 +465,7 @@ function updateStok(kode, tokoKode, jumlah) {
 
 loadExcel();
 // ════════════════════════════════════════════════════════════════
-//   7. KIRIM WHATSAPP (FONNTE)
+//   6. KIRIM WHATSAPP (FONNTE)
 // ════════════════════════════════════════════════════════════════
 
 function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
@@ -476,7 +486,7 @@ async function kirimWA(target, message, retry) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   8. GEMINI AI
+//   7. GEMINI AI
 // ════════════════════════════════════════════════════════════════
 
 async function analisaGambar(imageUrl, prompt) {
@@ -493,7 +503,7 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
   const fmt = ' Format WhatsApp dengan emoji. Format rupiah Rp X.XXX.XXX.';
   if (menuType === 1) {
     if (tokoKode === 'cp') {
-      return 'Baca data penjualan toko Central Perabot tanggal ' + tanggal + '. Buat laporan dengan format: 4 kassa (Kassa 1-4 dengan nama kasir), total keseluruhan, metode pembayaran (Tunai/Debit/Credit), jenis penjualan (Ecer/Grosir), laporan kasir promo, laporan parkir.' + fmt;
+      return 'Baca data penjualan toko Central Perabot tanggal ' + tanggal + '. Format: 4 kassa (Kassa 1 Yuni-Salsa, Kassa 2 Nanda-Umi-Marselina, Kassa 3 Febri-Jien-Tika, Kassa 4 Delfi-Tirsa), total keseluruhan, metode bayar, jenis penjualan, kasir promo, parkir.' + fmt;
     }
     if (tokoKode === 'nk') {
       return 'Baca data penjualan toko Nasional Kitchen tanggal ' + tanggal + '. Format: 2 kassa, total, metode bayar, jenis penjualan. Rupiah: Rp. X.XXX.XXX.' + fmt;
@@ -510,7 +520,7 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   9. SAPAAN PINTAR & MOTIVASI
+//   8. SAPAAN PINTAR & MOTIVASI
 // ════════════════════════════════════════════════════════════════
 
 const SAPAAN_MAP = {
@@ -663,7 +673,7 @@ function isAdminCommand(low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   10. MENU FRIENDLY
+//   9. MENU FRIENDLY
 // ════════════════════════════════════════════════════════════════
 
 function getMenuUtama(nomor) {
@@ -704,43 +714,24 @@ function getMenuPilihHari(namaToko) {
   return m;
 }
 
-function getMenuSiapInput(namaToko, kemarin, menuType, tokoKode) {
+function getMenuSiapInputMarket(namaToko, kemarin) {
   const t = getTanggal(kemarin);
   const k = kemarin ? ' _(kemarin)_' : '';
-  
-  // Untuk menu 2 & 3 - format teks bebas
-  if (menuType === 2) {
-    const contoh = '---baru---\nNama barang baru\n---naik---\nNama barang naik\n---turun---\nNama barang turun';
-    let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-    m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
-    m += '━━━━━━━━━━━━━━━━━━\n📤 *Pilih cara input:*\n━━━━━━━━━━━━━━━━━━\n\n';
-    m += '📸 *OPSI 1: Kirim FOTO*\n   _(akan dibaca AI otomatis)_\n\n';
-    m += '⌨️ *OPSI 2: Ketik manual*\n   Contoh format:\n\n```' + contoh + '```\n\n';
-    m += '🔙 Ketik *batal* untuk membatalkan';
-    return m;
-  }
-  
-  if (menuType === 3) {
-    const contoh = 'oesapa 0\ntdm 0\ncentral 21061000\nwa 21061000\nshopee 0\ntiktok 0\ntokopedia 0\ntunai 304000\ndebit 20757000';
-    let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-    m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
-    m += '━━━━━━━━━━━━━━━━━━\n📤 *Pilih cara input:*\n━━━━━━━━━━━━━━━━━━\n\n';
-    m += '📸 *OPSI 1: Kirim FOTO*\n   _(akan dibaca AI otomatis)_\n\n';
-    m += '⌨️ *OPSI 2: Ketik manual*\n   Contoh format:\n\n```' + contoh + '```\n\n';
-    m += '🔙 Ketik *batal* untuk membatalkan';
-    return m;
-  }
-  
-  // Untuk menu 1 (Laporan Penjualan) - dengan WIZARD
+  const contoh = 'oesapa 0\ntdm 0\ncentral 21061000\nwa 21061000\nshopee 0\ntiktok 0\ntokopedia 0\ntunai 304000\ndebit 20757000';
   let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
   m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
-  m += '━━━━━━━━━━━━━━━━━━\n📤 *Pilih cara input:*\n━━━━━━━━━━━━━━━━━━\n\n';
-  m += '🤖 *OPSI 1: WIZARD* ⭐ _Recommended_\n';
-  m += '   Bot tanya satu-satu,\n   kamu tinggal jawab nominal\n   👉 Ketik: *wizard*\n\n';
-  m += '📸 *OPSI 2: Kirim FOTO*\n';
-  m += '   Foto akan dibaca AI 🤖\n\n';
-  m += '⌨️ *OPSI 3: Ketik sekaligus*\n';
-  m += '   Format manual (untuk yang sudah hafal)\n\n';
+  m += '📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n';
+  m += '🔙 Ketik *batal* untuk membatalkan';
+  return m;
+}
+
+function getMenuSiapInputHarga(namaToko, kemarin) {
+  const t = getTanggal(kemarin);
+  const k = kemarin ? ' _(kemarin)_' : '';
+  const contoh = '---baru---\nNama barang baru\n---naik---\nNama barang naik\n---turun---\nNama barang turun';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+  m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
+  m += '📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n';
   m += '🔙 Ketik *batal* untuk membatalkan';
   return m;
 }
@@ -776,7 +767,7 @@ function getMenuCariUlang(namaToko) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   11. ★★★ WIZARD MODE ★★★
+//   10. ★★★ WIZARD MODE ★★★
 // ════════════════════════════════════════════════════════════════
 
 function wizardGetNextField(tokoKode, dataWizard) {
@@ -794,10 +785,10 @@ function wizardTanyaField(tokoKode, fieldInfo, namaToko, dataWizard) {
   const no = fieldInfo.index + 1;
   const total = fieldInfo.total;
   
-  let m = '🤖 *WIZARD INPUT*\n';
+  let m = '🤖 *INPUT LAPORAN*\n';
   m += '🏦 ' + namaToko + '\n';
   m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '📊 *Progress: ' + no + '/' + total + '*\n';
+  m += '📊 *Step ' + no + ' dari ' + total + '*\n';
   
   const progress = Math.floor((no / total) * 10);
   m += '[';
@@ -805,13 +796,31 @@ function wizardTanyaField(tokoKode, fieldInfo, namaToko, dataWizard) {
   m += '] ' + Math.round((no / total) * 100) + '%\n';
   m += '━━━━━━━━━━━━━━━━━━\n\n';
   
-  m += f.emoji + ' *' + f.label + '*\n\n';
+  // Tampilkan label dengan nama kasir otomatis (untuk CP)
+  let labelLengkap = f.label;
+  if (tokoKode === 'cp' && KASIR_CP_DEFAULT[f.key]) {
+    labelLengkap = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
+  }
   
-  if (f.tanyaNama && dataWizard['nama_' + f.key] === undefined) {
-    m += '👤 *Siapa nama kasir untuk ' + f.label + '?*\n\n';
-    m += '💡 Contoh: _Yuni-Salsa_\n';
-    m += '   atau ketik *-* jika tidak ada\n\n';
-  } else {
+  // Field "total" auto
+  if (f.key === 'total' && f.auto) {
+    let totalCalc = 0;
+    Object.keys(dataWizard).forEach(function(k) {
+      if (k.startsWith('k') && k.length <= 2 && !k.startsWith('kr')) {
+        totalCalc += (parseInt(dataWizard[k]) || 0);
+      }
+    });
+    const formatTotal = totalCalc === 0 ? 'Rp. -' : 'Rp. ' + totalCalc.toLocaleString('id-ID');
+    m += f.emoji + ' *' + labelLengkap + '*\n\n';
+    m += '📋 Total dari kassa: *' + formatTotal + '*\n\n';
+    m += '💰 *Masukkan total penjualan keseluruhan:*\n\n';
+    m += '💡 Ketik angka atau tekan:\n';
+    m += '   • _angka_ jika total berbeda\n';
+    m += '   • *ok* untuk pakai total kassa otomatis\n\n';
+  }
+  // Tanya nominal biasa
+  else {
+    m += f.emoji + ' *' + labelLengkap + '*\n\n';
     m += '💰 *Berapa nominalnya?*\n\n';
     m += '💡 Ketik angka saja:\n';
     m += '   • _29812000_\n';
@@ -820,46 +829,48 @@ function wizardTanyaField(tokoKode, fieldInfo, namaToko, dataWizard) {
   }
   
   m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '🔙 *batal* — batalkan\n';
-  m += '⏭️ *skip* — lewati field ini\n';
-  m += '👁️ *review* — cek data sementara';
+  m += '🔙 *batal* | ⏭️ *skip* | 👁️ *review*';
   return m;
 }
 
 function wizardReview(tokoKode, dataWizard, namaToko) {
   const fields = FIELD_LAPORAN[tokoKode];
   let m = '👁️ *REVIEW DATA SEMENTARA*\n';
-  m += '🏦 ' + namaToko + '\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
+  m += '🏦 ' + namaToko + '\n━━━━━━━━━━━━━━━━━━\n\n';
   
   fields.forEach(function(f) {
     const v = dataWizard[f.key];
-    const nm = dataWizard['nama_' + f.key];
+    let labelLengkap = f.label;
+    if (tokoKode === 'cp' && KASIR_CP_DEFAULT[f.key]) {
+      labelLengkap = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
+    }
     if (v === undefined) {
-      m += '⬜ ' + f.label + ': _(belum diisi)_\n';
+      m += '⬜ ' + labelLengkap + ': _(belum diisi)_\n';
     } else if (v === 0) {
-      m += '✅ ' + f.label + ': Rp. -' + (nm ? ' _(' + nm + ')_' : '') + '\n';
+      m += '✅ ' + labelLengkap + ': Rp. -\n';
     } else {
-      m += '✅ ' + f.label + ': Rp. ' + parseInt(v).toLocaleString('id-ID') + (nm ? ' _(' + nm + ')_' : '') + '\n';
+      m += '✅ ' + labelLengkap + ': Rp. ' + parseInt(v).toLocaleString('id-ID') + '\n';
     }
   });
   
   m += '\n━━━━━━━━━━━━━━━━━━\n';
-  m += '💬 *lanjut* — lanjut input field berikutnya\n';
-  m += '💬 *selesai* — generate laporan sekarang\n';
+  m += '💬 *lanjut* — lanjut input\n';
+  m += '💬 *selesai* — generate laporan\n';
   m += '🔙 *batal* — batalkan';
   return m;
 }
 
-function wizardToText(dataWizard) {
+function wizardToText(dataWizard, tokoKode) {
   let text = '';
   Object.keys(dataWizard).forEach(function(key) {
     if (key.startsWith('nama_')) return;
     if (key.startsWith('_')) return;
+    if (key === 'total') return; // skip "total" karena dihitung otomatis di generator
     const v = dataWizard[key];
-    const nm = dataWizard['nama_' + key];
-    if (nm) {
-      text += key + ' ' + nm + ' ' + (v || 0) + '\n';
+    
+    // Untuk CP: auto-tambahkan nama kasir
+    if (tokoKode === 'cp' && KASIR_CP_DEFAULT[key]) {
+      text += key + ' ' + KASIR_CP_DEFAULT[key] + ' ' + (v || 0) + '\n';
     } else {
       text += key + ' ' + (v || 0) + '\n';
     }
@@ -868,7 +879,7 @@ function wizardToText(dataWizard) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. PARSER PINTAR
+//   11. PARSER PINTAR
 // ════════════════════════════════════════════════════════════════
 
 function parsePilihanMenu(low) {
@@ -919,7 +930,7 @@ function parsePilihanAdmin(low) {
   return null;
 }
 // ════════════════════════════════════════════════════════════════
-//   13. FORMAT HASIL CARI
+//   12. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
@@ -974,7 +985,7 @@ function formatHasil(searchResult, tokoKode, sender) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   14. GENERATOR LAPORAN
+//   13. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
@@ -1128,14 +1139,20 @@ function genLapPenjualanCP(text, kemarin) {
     return 'Rp. ' + v.toLocaleString('id-ID');
   }
   
+  // Pastikan nama kasir terisi (fallback ke default)
+  if (!d.nk1) d.nk1 = KASIR_CP_DEFAULT.k1;
+  if (!d.nk2) d.nk2 = KASIR_CP_DEFAULT.k2;
+  if (!d.nk3) d.nk3 = KASIR_CP_DEFAULT.k3;
+  if (!d.nk4) d.nk4 = KASIR_CP_DEFAULT.k4;
+  
   const totalUtama = d.k1 + d.k2 + d.k3 + d.k4;
   const totalParkir = d.parkirKomputer + d.parkirLuar;
   
   let msg = 'Laporan Penjualan Toko Central Perabot Periode ' + t + '\n\n';
-  msg += 'Kassa 1' + (d.nk1 ? ' (' + d.nk1 + ')' : '') + ' ' + fr(d.k1) + '\n';
-  msg += 'Kassa 2' + (d.nk2 ? ' (' + d.nk2 + ')' : '') + ' ' + fr(d.k2) + '\n';
-  msg += 'Kassa 3' + (d.nk3 ? ' (' + d.nk3 + ')' : '') + ' ' + fr(d.k3) + '\n';
-  msg += 'Kassa 4' + (d.nk4 ? ' (' + d.nk4 + ')' : '') + ' ' + fr(d.k4) + '\n\n';
+  msg += 'Kassa 1 (' + d.nk1 + ') ' + fr(d.k1) + '\n';
+  msg += 'Kassa 2 (' + d.nk2 + ') ' + fr(d.k2) + '\n';
+  msg += 'Kassa 3 (' + d.nk3 + ') ' + fr(d.k3) + '\n';
+  msg += 'Kassa 4 (' + d.nk4 + ') ' + fr(d.k4) + '\n\n';
   msg += 'Total Penjualan Keseluruhan: ' + fr(totalUtama) + '\n';
   msg += '---------------------------------------------\n\n';
   msg += 'Tunai  ' + fr(d.tunai) + '\n';
@@ -1216,7 +1233,7 @@ function genLapMarket(text, kemarin) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. HANDLER ADMIN
+//   14. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
@@ -1291,25 +1308,23 @@ async function handleAdmin(sender, msg, low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   16. ROUTES
+//   15. ROUTES
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v3.5', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
+  res.json({ status: 'ok', app: CONFIG.appName + ' v3.6', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
 });
-
 app.get('/reload', function(req, res) {
   const ok = loadExcel();
   res.json({ success: ok, total: DATA_BARANG.length });
 });
-
 app.get('/resetsesi/:nomor', function(req, res) {
   resetSesi(req.params.nomor);
   res.json({ ok: true });
 });
 
 // ════════════════════════════════════════════════════════════════
-//   17. WEBHOOK UTAMA
+//   16. WEBHOOK UTAMA
 // ════════════════════════════════════════════════════════════════
 
 const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home'];
@@ -1350,7 +1365,7 @@ app.post('/webhook', async function(req, res) {
     const _s = SESI[sender] || {};
     const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive;
 
-    // ── RESET (smart) ──
+    // ── RESET ──
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
@@ -1470,7 +1485,35 @@ app.post('/webhook', async function(req, res) {
       }
       updateSesi(sender, { kemarin: kem });
       const nm = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
-      await kirimWA(sender, getMenuSiapInput(nm, kem, s.menu, s.toko));
+      
+      // ★★★ MENU 1 (PENJUALAN) → LANGSUNG MASUK WIZARD ★★★
+      if (s.menu === 1) {
+        const t = getTanggal(kem);
+        const kk = kem ? ' _(kemarin)_' : '';
+        let intro = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *MULAI INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
+        intro += '🏦 ' + nm + '\n📅 ' + t + kk + '\n\n';
+        intro += '📸 *Kirim FOTO* untuk dibaca AI\n';
+        intro += '   _atau jawab pertanyaan di bawah_\n\n';
+        intro += '━━━━━━━━━━━━━━━━━━';
+        await kirimWA(sender, intro);
+        await tunggu(800);
+        
+        updateSesi(sender, { wizardActive: true, wizardData: {} });
+        const nextField = wizardGetNextField(s.toko, {});
+        if (nextField) await kirimWA(sender, wizardTanyaField(s.toko, nextField, nm, {}));
+        return;
+      }
+      
+      // Menu 2: laporan harga
+      if (s.menu === 2) {
+        await kirimWA(sender, getMenuSiapInputHarga(nm, kem));
+        return;
+      }
+      // Menu 3: laporan marketplace
+      if (s.menu === 3) {
+        await kirimWA(sender, getMenuSiapInputMarket(nm, kem));
+        return;
+      }
       return;
     }
 
@@ -1478,14 +1521,6 @@ app.post('/webhook', async function(req, res) {
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
 
-    // ★★★ WIZARD MODE - ACTIVATION ★★★
-    if (s.menu === 1 && !s.wizardActive && low === 'wizard') {
-      updateSesi(sender, { wizardActive: true, wizardData: {} });
-      const nextField = wizardGetNextField(s.toko, {});
-      if (nextField) await kirimWA(sender, wizardTanyaField(s.toko, nextField, namaToko, {}));
-      return;
-    }
-    
     // ★★★ WIZARD MODE - PROCESS INPUT ★★★
     if (s.menu === 1 && s.wizardActive) {
       const dataWizard = s.wizardData || {};
@@ -1496,11 +1531,11 @@ app.post('/webhook', async function(req, res) {
         return;
       }
       
-      // Selesai paksa (generate dengan data yang ada)
+      // Selesai paksa
       if (low === 'selesai' || low === 'finish' || low === 'done') {
         const fields = FIELD_LAPORAN[s.toko];
         fields.forEach(function(f) { if (dataWizard[f.key] === undefined) dataWizard[f.key] = 0; });
-        const text = wizardToText(dataWizard);
+        const text = wizardToText(dataWizard, s.toko);
         laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
         if (laporan) {
           await kirimWA(sender, laporan);
@@ -1516,7 +1551,7 @@ app.post('/webhook', async function(req, res) {
         const nextField = wizardGetNextField(s.toko, dataWizard);
         if (nextField) await kirimWA(sender, wizardTanyaField(s.toko, nextField, namaToko, dataWizard));
         else {
-          const text = wizardToText(dataWizard);
+          const text = wizardToText(dataWizard, s.toko);
           laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
           if (laporan) {
             await kirimWA(sender, laporan);
@@ -1530,7 +1565,7 @@ app.post('/webhook', async function(req, res) {
       
       const currentField = wizardGetNextField(s.toko, dataWizard);
       if (!currentField) {
-        const text = wizardToText(dataWizard);
+        const text = wizardToText(dataWizard, s.toko);
         laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
         if (laporan) {
           await kirimWA(sender, laporan);
@@ -1546,14 +1581,13 @@ app.post('/webhook', async function(req, res) {
       // Skip field
       if (low === 'skip' || low === 'lewati') {
         dataWizard[f.key] = 0;
-        if (f.tanyaNama) dataWizard['nama_' + f.key] = '';
         updateSesi(sender, { wizardData: dataWizard });
         const next = wizardGetNextField(s.toko, dataWizard);
         if (next) {
           await tunggu(300);
           await kirimWA(sender, '⏭️ _Dilewati (diisi 0)_\n\n' + wizardTanyaField(s.toko, next, namaToko, dataWizard));
         } else {
-          const text = wizardToText(dataWizard);
+          const text = wizardToText(dataWizard, s.toko);
           laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
           if (laporan) {
             await kirimWA(sender, laporan);
@@ -1565,24 +1599,19 @@ app.post('/webhook', async function(req, res) {
         return;
       }
       
-      // Untuk CP: tanya nama kasir dulu
-      if (f.tanyaNama && dataWizard['nama_' + f.key] === undefined) {
-        const namaInput = (msg === '-' || low === 'kosong') ? '' : msg.trim();
-        dataWizard['nama_' + f.key] = namaInput;
-        updateSesi(sender, { wizardData: dataWizard });
-        let m = f.emoji + ' *' + f.label + (namaInput ? ' (' + namaInput + ')' : '') + '*\n\n';
-        m += '💰 *Berapa nominalnya?*\n\n';
-        m += '💡 Ketik angka saja:\n';
-        m += '   • _42345000_\n';
-        m += '   • _-_ atau *0* jika kosong\n\n';
-        m += '🔙 Ketik *batal* untuk batalkan';
-        await kirimWA(sender, m);
-        return;
-      }
-      
       // Parse nominal
       let nominal = 0;
-      if (msg === '-' || low === 'kosong' || low === 'null') {
+      
+      // Untuk field "total" dengan auto → user bisa ketik "ok" untuk pakai total kassa
+      if (f.key === 'total' && f.auto && (low === 'ok' || low === 'ya' || low === 'yes' || low === 'y' || low === 'otomatis' || low === 'auto')) {
+        let totalCalc = 0;
+        Object.keys(dataWizard).forEach(function(k) {
+          if (k.startsWith('k') && k.length <= 2 && !k.startsWith('kr')) {
+            totalCalc += (parseInt(dataWizard[k]) || 0);
+          }
+        });
+        nominal = totalCalc;
+      } else if (msg === '-' || low === 'kosong' || low === 'null') {
         nominal = 0;
       } else {
         const angka = msg.replace(/[^0-9]/g, '');
@@ -1596,16 +1625,22 @@ app.post('/webhook', async function(req, res) {
       dataWizard[f.key] = nominal;
       updateSesi(sender, { wizardData: dataWizard });
       
+      // Format konfirmasi dengan nama kasir (CP)
+      let labelKonfirmasi = f.label;
+      if (s.toko === 'cp' && KASIR_CP_DEFAULT[f.key]) {
+        labelKonfirmasi = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
+      }
+      
       const formatNominal = nominal === 0 ? 'Rp. -' : 'Rp. ' + nominal.toLocaleString('id-ID');
       const next = wizardGetNextField(s.toko, dataWizard);
       
       if (next) {
         await tunggu(300);
-        await kirimWA(sender, '✅ _' + f.label + ': ' + formatNominal + ' disimpan_\n\n' + wizardTanyaField(s.toko, next, namaToko, dataWizard));
+        await kirimWA(sender, '✅ _' + labelKonfirmasi + ': ' + formatNominal + ' disimpan_\n\n' + wizardTanyaField(s.toko, next, namaToko, dataWizard));
       } else {
-        await kirimWA(sender, '✅ _' + f.label + ': ' + formatNominal + ' disimpan_\n\n🎉 *Semua data sudah diisi!*\n⏳ _Sedang generate laporan..._');
+        await kirimWA(sender, '✅ _' + labelKonfirmasi + ': ' + formatNominal + ' disimpan_\n\n🎉 *Semua data sudah diisi!*\n⏳ _Sedang generate laporan..._');
         await tunggu(800);
-        const text = wizardToText(dataWizard);
+        const text = wizardToText(dataWizard, s.toko);
         laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
         if (laporan) {
           await kirimWA(sender, laporan);
@@ -1617,7 +1652,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── MODE NORMAL (foto atau ketik manual sekaligus) ──
+    // ── MODE NORMAL (foto atau ketik manual untuk menu 2 & 3) ──
     if (image && image.length > 0) {
       await kirimWA(sender, '📸 Foto diterima, sedang dianalisa AI...');
       try {
@@ -1651,13 +1686,13 @@ app.post('/webhook', async function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   18. START SERVER
+//   17. START SERVER
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v3.5');
-  console.log('  (Wizard Mode Input Step-by-Step)');
+  console.log('  ' + CONFIG.appName + ' v3.6');
+  console.log('  (Auto Wizard + Auto Nama Kasir CP)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  Admin     : ' + CONFIG.adminNumber);
