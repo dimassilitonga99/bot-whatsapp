@@ -281,33 +281,102 @@ function loadExcel() {
     return false;
   }
   try {
-    const wb   = xlsx.readFile(CONFIG.paths.excel);
-    const ws   = wb.Sheets[wb.SheetNames[0]];
-    const rows = xlsx.utils.sheet_to_json(ws, { defval: 0, range: 1 });
-
-    DATA_BARANG = rows.map(function(r) {
+    const wb = xlsx.readFile(CONFIG.paths.excel);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    
+    // Baca semua data sebagai array of array
+    const allRows = xlsx.utils.sheet_to_json(ws, { 
+      header: 1, 
+      defval: 0,
+      blankrows: false 
+    });
+    
+    if (allRows.length < 3) {
+      log.error('EXCEL', 'Data terlalu sedikit, minimal 3 baris');
+      return false;
+    }
+    
+    // Baris ke-2 (index 1) adalah header asli
+    const headers = allRows[1].map(function(h) { 
+      return String(h || '').trim(); 
+    });
+    
+    log.info('EXCEL', 'Headers terdeteksi: ' + JSON.stringify(headers));
+    
+    // Cari index kolom berdasarkan nama
+    function findCol(name) {
+      const idx = headers.findIndex(function(h) {
+        return h.toLowerCase().replace(/\s+/g, ' ').trim() === name.toLowerCase();
+      });
+      return idx;
+    }
+    
+    const colMap = {
+      kode:   findCol('Kode Item'),
+      nama:   findCol('Nama Item'),
+      jenis:  findCol('Jenis'),
+      merek:  findCol('Merek'),
+      satuan: findCol('Satuan'),
+    };
+    
+    // Map kolom per toko
+    const tokoColMap = {};
+    Object.keys(TOKO_COLS).forEach(function(kode) {
+      const c = TOKO_COLS[kode];
+      tokoColMap[kode] = {
+        ecer:  findCol(c.ecer),
+        ambil: findCol(c.ambil),
+        stok:  findCol(c.stok),
+      };
+    });
+    
+    log.info('EXCEL', 'Kolom info: ' + JSON.stringify(colMap));
+    log.info('EXCEL', 'Kolom toko: ' + JSON.stringify(tokoColMap));
+    
+    // Validasi kolom wajib
+    if (colMap.kode === -1 || colMap.nama === -1) {
+      log.error('EXCEL', 'Kolom "Kode Item" atau "Nama Item" tidak ditemukan!');
+      return false;
+    }
+    
+    // Parse data mulai baris ke-3 (index 2)
+    DATA_BARANG = [];
+    for (let i = 2; i < allRows.length; i++) {
+      const row = allRows[i];
+      if (!row || row.length === 0) continue;
+      
+      const kode = String(row[colMap.kode] || '').trim().toUpperCase();
+      if (!kode || kode === 'UNDEFINED' || kode === '0') continue;
+      
       const item = {
-        kode:   String(r['Kode Item'] || '').trim().toUpperCase(),
-        nama:   String(r['Nama Item'] || '').trim().toUpperCase(),
-        jenis:  String(r['Jenis']     || '').trim(),
-        merek:  String(r['Merek']     || '').trim(),
-        satuan: String(r['Satuan']    || '').trim(),
+        kode:   kode,
+        nama:   String(row[colMap.nama]   || '').trim().toUpperCase(),
+        jenis:  String(row[colMap.jenis]  || '').trim(),
+        merek:  String(row[colMap.merek]  || '').trim(),
+        satuan: String(row[colMap.satuan] || '').trim(),
         harga:  {},
       };
-      Object.keys(TOKO_COLS).forEach(function(k) {
-        const c = TOKO_COLS[k];
-        item.harga[k] = {
-          ecer:  parseFloat(r[c.ecer]  || 0) || 0,
-          ambil: parseFloat(r[c.ambil] || 0) || 0,
-          stok:  parseInt(r[c.stok]    || 0) || 0,
+      
+      Object.keys(TOKO_COLS).forEach(function(tk) {
+        const tc = tokoColMap[tk];
+        item.harga[tk] = {
+          ecer:  tc.ecer  >= 0 ? (parseFloat(row[tc.ecer])  || 0) : 0,
+          ambil: tc.ambil >= 0 ? (parseFloat(row[tc.ambil]) || 0) : 0,
+          stok:  tc.stok  >= 0 ? (parseInt(row[tc.stok])    || 0) : 0,
         };
       });
-      return item;
-    }).filter(function(d) {
-      return d.kode && d.kode !== 'UNDEFINED' && d.kode !== '0';
-    });
+      
+      DATA_BARANG.push(item);
+    }
 
     log.info('EXCEL', 'Loaded ' + DATA_BARANG.length + ' item');
+    
+    // Test: cari NN00001 dan tampilkan harganya
+    const test = DATA_BARANG.find(function(d) { return d.kode === 'NN00001'; });
+    if (test) {
+      log.info('EXCEL', 'Test NN00001 - Ecer NK: ' + test.harga.nk.ecer + ', Ambil NK: ' + test.harga.nk.ambil);
+    }
+    
     return true;
   } catch (e) {
     log.error('EXCEL', 'Gagal load', e.message);
@@ -827,6 +896,21 @@ app.get('/', function(req, res) {
 app.get('/reload', function(req, res) {
   const ok = loadExcel();
   res.json({ success: ok, total: DATA_BARANG.length });
+});
+
+// ── DEBUG ENDPOINTS ──────────────────────────────────
+app.get('/debug', function(req, res) {
+  res.json({
+    total: DATA_BARANG.length,
+    contoh_5_pertama: DATA_BARANG.slice(0, 5),
+  });
+});
+
+app.get('/debug/:kode', function(req, res) {
+  const kode = req.params.kode.toUpperCase();
+  const item = DATA_BARANG.find(function(d) { return d.kode === kode; });
+  if (!item) return res.status(404).json({ error: 'Tidak ditemukan', kode: kode });
+  res.json(item);
 });
 
 // ════════════════════════════════════════════════════════════════
