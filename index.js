@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 2.1 - Smart Search + Expand Member
+//   Versi 2.2 - Fix Admin Priority Bug
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -98,6 +98,12 @@ const DEFAULT_KONTAK = {
   '6285829278962': 'Admin'
 };
 
+// Daftar perintah admin (dikenali tanpa case-sensitive)
+const ADMIN_COMMANDS = [
+  'daftar', 'hapus', 'listmember', 'namakontak', 'hapuskontak',
+  'listkontak', 'reload', 'info', 'broadcast'
+];
+
 // ════════════════════════════════════════════════════════════════
 //   3. LOGGER
 // ════════════════════════════════════════════════════════════════
@@ -120,7 +126,7 @@ const log = {
 };
 
 // ════════════════════════════════════════════════════════════════
-//   4. UTILS - WAKTU & FORMAT
+//   4. UTILS
 // ════════════════════════════════════════════════════════════════
 
 function getWaktu() {
@@ -258,7 +264,7 @@ setInterval(function() {
 }, 5 * 60 * 1000);
 
 // ════════════════════════════════════════════════════════════════
-//   6. DATA BARANG (EXCEL)
+//   6. EXCEL
 // ════════════════════════════════════════════════════════════════
 
 let DATA_BARANG = [];
@@ -376,7 +382,7 @@ function saveExcel() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   7. SMART SEARCH ENGINE
+//   7. SMART SEARCH
 // ════════════════════════════════════════════════════════════════
 
 function levenshtein(a, b) {
@@ -429,45 +435,23 @@ function hitungSkor(item, words) {
   
   words.forEach(function(w) {
     let found = false;
-    
-    if (namaBersih.indexOf(w) >= 0) {
-      exactMatch++;
-      skor += 10;
-      found = true;
-    }
-    
-    if (kodeBersih.indexOf(w) >= 0) {
-      exactMatch++;
-      skor += 10;
-      found = true;
-    }
-    
+    if (namaBersih.indexOf(w) >= 0) { exactMatch++; skor += 10; found = true; }
+    if (kodeBersih.indexOf(w) >= 0) { exactMatch++; skor += 10; found = true; }
     if (!found) {
       for (let i = 0; i < namaWords.length; i++) {
-        if (kataMirip(w, namaWords[i])) {
-          fuzzyMatch++;
-          skor += 5;
-          found = true;
-          break;
-        }
+        if (kataMirip(w, namaWords[i])) { fuzzyMatch++; skor += 5; found = true; break; }
       }
     }
-    
     if (!found) {
       for (let i = 0; i < namaWords.length; i++) {
         if (namaWords[i].indexOf(w) >= 0 || w.indexOf(namaWords[i]) >= 0) {
-          partialMatch++;
-          skor += 3;
-          found = true;
-          break;
+          partialMatch++; skor += 3; found = true; break;
         }
       }
     }
   });
   
-  if (exactMatch + fuzzyMatch + partialMatch >= words.length) {
-    skor += 20;
-  }
+  if (exactMatch + fuzzyMatch + partialMatch >= words.length) skor += 20;
   
   return {
     skor:         skor,
@@ -485,13 +469,11 @@ function cariBarang(keyword) {
   
   if (words.length === 0) return { hasil: [], saran: [], tipeHasil: 'kosong' };
   
-  // 1. Exact match by kode
   const byKode = DATA_BARANG.filter(function(d) { return d.kode === q; });
   if (byKode.length > 0) {
     return { hasil: byKode, saran: [], tipeHasil: 'exact', totalDitemukan: byKode.length };
   }
   
-  // 2. Exact match (semua kata ada)
   const exactResults = DATA_BARANG.filter(function(d) {
     const namaBersih = bersihkanTeks(d.nama);
     return words.every(function(w) {
@@ -508,17 +490,11 @@ function cariBarang(keyword) {
     };
   }
   
-  // 3. Smart/Fuzzy search
   const skorItems = [];
   DATA_BARANG.forEach(function(item) {
     const info = hitungSkor(item, words);
     if (info.skor > 0 && info.totalMatch >= Math.ceil(words.length * 0.5)) {
-      skorItems.push({
-        item:       item,
-        skor:       info.skor,
-        exactMatch: info.exactMatch,
-        fuzzyMatch: info.fuzzyMatch,
-      });
+      skorItems.push({ item: item, skor: info.skor, fuzzyMatch: info.fuzzyMatch });
     }
   });
   
@@ -538,7 +514,6 @@ function cariBarang(keyword) {
     };
   }
   
-  // 4. Cari saran per kata (untuk koreksi typo)
   const saranSet = {};
   words.forEach(function(w) {
     if (w.length < 2) return;
@@ -546,9 +521,7 @@ function cariBarang(keyword) {
       const namaWords = bersihkanTeks(item.nama).split(/\s+/);
       namaWords.forEach(function(nw) {
         if (kataMirip(w, nw) || nw.indexOf(w) >= 0 || w.indexOf(nw) >= 0) {
-          if (!saranSet[item.kode]) {
-            saranSet[item.kode] = { item: item, matchCount: 0 };
-          }
+          if (!saranSet[item.kode]) saranSet[item.kode] = { item: item, matchCount: 0 };
           saranSet[item.kode].matchCount++;
         }
       });
@@ -579,7 +552,7 @@ function updateStok(kode, tokoKode, jumlah) {
 loadExcel();
 
 // ════════════════════════════════════════════════════════════════
-//   8. KIRIM WHATSAPP (FONNTE)
+//   8. FONNTE
 // ════════════════════════════════════════════════════════════════
 
 function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
@@ -634,7 +607,7 @@ function buatPromptAI(menuType, namaToko, tanggal) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   10. DETEKSI SAPAAN & TERIMA KASIH
+//   10. SAPAAN & TERIMA KASIH
 // ════════════════════════════════════════════════════════════════
 
 const KATA_SAPAAN = [
@@ -693,7 +666,21 @@ function balasTerimakasih(sender) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   11. MENU & PROMPT
+//   11. CEK APAKAH PERINTAH ADMIN (PENTING!)
+// ════════════════════════════════════════════════════════════════
+
+function isAdminCommand(low) {
+  // Cek perintah single word (listmember, listkontak, reload, info)
+  if (['listmember','listkontak','reload','info'].indexOf(low) >= 0) return true;
+  
+  // Cek perintah dengan parameter (daftar 628xxx, hapus 628xxx, dll)
+  return ADMIN_COMMANDS.some(function(cmd) {
+    return low.startsWith(cmd + ' ');
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+//   12. MENU & PROMPT
 // ════════════════════════════════════════════════════════════════
 
 function getMenu(nomor) {
@@ -769,7 +756,7 @@ function msgSiapInput(nm, kemarin, menuType) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. FORMAT HASIL CARI
+//   13. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
@@ -782,7 +769,6 @@ function formatHasil(searchResult, tokoKode, sender) {
   const tipeHasil      = searchResult.tipeHasil || 'kosong';
   const totalDitemukan = searchResult.totalDitemukan || items.length;
 
-  // KOSONG TOTAL
   if (tipeHasil === 'kosong') {
     return '❌ *Barang Tidak Ditemukan*\n' + GARIS_TEBAL +
       '\nKata kunci tidak cocok dengan data kami.\n\n' +
@@ -793,7 +779,6 @@ function formatHasil(searchResult, tokoKode, sender) {
       '• Periksa ejaan kata kunci';
   }
 
-  // ADA SARAN tapi tidak ada match persis
   if (tipeHasil === 'saran' && items.length === 0 && saran.length > 0) {
     let msg = '🤔 *Barang Tidak Ditemukan Persis*\n' + GARIS_TEBAL +
       '\n🏦 *' + namaToko + '*\n\n' +
@@ -811,7 +796,6 @@ function formatHasil(searchResult, tokoKode, sender) {
     return msg + suffix;
   }
 
-  // SATU HASIL — DETAIL
   if (items.length === 1) {
     const d = items[0];
     const h = d.harga[tokoKode];
@@ -832,7 +816,6 @@ function formatHasil(searchResult, tokoKode, sender) {
     return msg + suffix;
   }
 
-  // BANYAK HASIL
   let header = '';
   if (totalDitemukan > CONFIG.maxHasilCari) {
     header = '🔍 *Menampilkan ' + items.length + ' dari ' + totalDitemukan + ' Barang*\n';
@@ -866,7 +849,7 @@ function formatHasil(searchResult, tokoKode, sender) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   13. GENERATOR LAPORAN
+//   14. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin) {
@@ -975,7 +958,7 @@ function genLapMarket(text, kemarin) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   14. HANDLER ADMIN
+//   15. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
@@ -1067,7 +1050,7 @@ async function handleAdmin(sender, msg, low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. ROUTES & DEBUG
+//   16. ROUTES & DEBUG
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
@@ -1105,8 +1088,14 @@ app.get('/search/:kw', function(req, res) {
   res.json(hasil);
 });
 
+// Reset sesi user tertentu (untuk debug)
+app.get('/resetsesi/:nomor', function(req, res) {
+  resetSesi(req.params.nomor);
+  res.json({ ok: true, msg: 'Sesi ' + req.params.nomor + ' direset' });
+});
+
 // ════════════════════════════════════════════════════════════════
-//   16. WEBHOOK UTAMA
+//   17. WEBHOOK UTAMA (LOGIC URUTAN DIPERBAIKI!)
 // ════════════════════════════════════════════════════════════════
 
 const KATA_RESET = ['0', 'batal', 'menu', 'mulai', 'start', 'kembali'];
@@ -1127,6 +1116,9 @@ app.post('/webhook', async function(req, res) {
 
     log.info('WEBHOOK', 'Pesan dari ' + sender + ': ' + msg.substring(0, 50));
 
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 1: SAPAAN PERTAMA (untuk user baru)
+    // ═══════════════════════════════════════════════════
     if (!SUDAH_DISAPA[sender]) {
       SUDAH_DISAPA[sender] = true;
       saveJSON(CONFIG.paths.disapa, SUDAH_DISAPA);
@@ -1135,25 +1127,46 @@ app.post('/webhook', async function(req, res) {
       if (trigger.indexOf(low) === -1) return;
     }
 
-    if (isAdmin(sender)) {
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 2: PERINTAH ADMIN (SELALU diutamakan!)
+    // Bahkan saat user lagi mode cari atau laporan
+    // ═══════════════════════════════════════════════════
+    if (isAdmin(sender) && isAdminCommand(low)) {
+      log.info('WEBHOOK', 'Admin command terdeteksi: ' + low);
+      // Reset sesi dulu supaya tidak nyangkut
+      if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu)) {
+        resetSesi(sender);
+      }
       const handled = await handleAdmin(sender, msg, low);
       if (handled) return;
     }
 
-    if (isSapaan(low))      { await kirimWA(sender, balasSapaan(sender));      return; }
-    if (isTerimakasih(low)) { await kirimWA(sender, balasTerimakasih(sender)); return; }
-
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 3: RESET / MENU
+    // ═══════════════════════════════════════════════════
     if (KATA_RESET.indexOf(low) >= 0) {
       resetSesi(sender);
       await kirimWA(sender, getMenu(sender));
       return;
     }
 
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 4: SAPAAN & TERIMA KASIH
+    // ═══════════════════════════════════════════════════
+    if (isSapaan(low))      { await kirimWA(sender, balasSapaan(sender));      return; }
+    if (isTerimakasih(low)) { await kirimWA(sender, balasTerimakasih(sender)); return; }
+
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 5: CEK AKSES untuk fitur member
+    // ═══════════════════════════════════════════════════
     if ((low.startsWith('cari ') || low.startsWith('stok ')) && !isMember(sender)) {
       await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member terdaftar.\n\nHubungi admin untuk mendaftar.');
       return;
     }
 
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 6: UPDATE STOK
+    // ═══════════════════════════════════════════════════
     if (low.startsWith('stok ') && isMember(sender)) {
       const p = msg.substring(5).trim().split(/\s+/);
       if (p.length < 3) {
@@ -1171,6 +1184,9 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 7: CARI LANGSUNG (dengan "cari ")
+    // ═══════════════════════════════════════════════════
     if (low.startsWith('cari ')) {
       const kw = msg.substring(5).trim();
       if (!kw) { await kirimWA(sender, '⚠️ Contoh: _cari dandang eagle 20_'); return; }
@@ -1186,6 +1202,11 @@ app.post('/webhook', async function(req, res) {
 
     const s = getSesi(sender);
 
+    // ═══════════════════════════════════════════════════
+    // PRIORITAS 8: ALUR SESI (mode cari & laporan)
+    // ═══════════════════════════════════════════════════
+    
+    // MODE CARI: pilih toko
     if (s.mode === 'cari' && !s.tokoKode) {
       const idx = parseInt(msg) - 1;
       if (idx >= 0 && idx < TOKO_LIST.length && !isNaN(idx)) {
@@ -1207,6 +1228,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // MODE CARI: terima keyword
     if (s.mode === 'cari' && s.tokoKode) {
       if (!msg) return;
       await kirimWA(sender, formatHasil(cariBarang(msg), s.tokoKode, sender));
@@ -1216,6 +1238,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // LEVEL 1: Pilih menu
     if (!s.menu) {
       if (msg === '1' || msg === '2') {
         updateSesi(sender, { menu: parseInt(msg) });
@@ -1237,10 +1260,11 @@ app.post('/webhook', async function(req, res) {
         await kirimWA(sender, MSG_PILIH_TOKO_CARI);
         return;
       }
-      await kirimWA(sender, '🤔 Maaf, saya tidak mengerti.\n\nKetik *menu* untuk melihat pilihan.');
+      await kirimWA(sender, '🤔 Maaf, saya tidak mengerti pesan tersebut.\n\nKetik *menu* untuk melihat pilihan.');
       return;
     }
 
+    // LEVEL 2: Pilih toko (menu 1 & 2)
     if (s.menu !== 3 && !s.toko) {
       const idx = parseInt(msg) - 1;
       if (idx >= 0 && idx < TOKO_LIST.length && !isNaN(idx)) {
@@ -1252,6 +1276,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // LEVEL 3: Pilih hari
     if (s.kemarin === undefined || s.kemarin === null) {
       let kem;
       if (msg === '1') kem = false;
@@ -1267,6 +1292,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // LEVEL 4: Terima data / foto
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
 
@@ -1313,12 +1339,12 @@ app.post('/webhook', async function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   17. START SERVER
+//   18. START SERVER
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
   console.log('\n═══════════════════════════════════════');
-  console.log('  ' + CONFIG.appName + ' v2.1');
+  console.log('  ' + CONFIG.appName + ' v2.2');
   console.log('═══════════════════════════════════════');
   console.log('  ✅ Status      : AKTIF');
   console.log('  🌐 Port        : ' + CONFIG.port);
