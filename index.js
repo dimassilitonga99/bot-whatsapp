@@ -608,6 +608,207 @@ function isPertanyaanBanding(low) {
   return KATA_BANDING.some(function(k) { return low.indexOf(k) >= 0; });
 }
 
+/**
+ * Deteksi toko-toko yang disebut user dari pesan
+ * Return: array of toko object yang disebut
+ */
+function deteksiTokoDariTeks(low) {
+  const tokoDitemukan = [];
+  const sudahAda = {};
+  
+  TOKO_LIST.forEach(function(t) {
+    let ketemu = false;
+    
+    // Cek kode toko
+    const regexKode = new RegExp('\\b' + t.kode + '\\b', 'i');
+    if (regexKode.test(low)) ketemu = true;
+    
+    // Cek alias (nama lain toko)
+    if (!ketemu) {
+      for (let i = 0; i < t.alias.length; i++) {
+        const alias = t.alias[i];
+        const regexAlias = new RegExp('\\b' + alias + '\\b', 'i');
+        if (regexAlias.test(low)) {
+          ketemu = true;
+          break;
+        }
+      }
+    }
+    
+    // Cek nama lengkap toko
+    if (!ketemu) {
+      const namaLow = t.nama.toLowerCase();
+      // Cek setiap kata di nama toko
+      const kataNama = namaLow.split(/\s+/);
+      for (let i = 0; i < kataNama.length; i++) {
+        if (kataNama[i].length >= 4 && low.indexOf(kataNama[i]) >= 0) {
+          ketemu = true;
+          break;
+        }
+      }
+    }
+    
+    if (ketemu && !sudahAda[t.kode]) {
+      tokoDitemukan.push(t);
+      sudahAda[t.kode] = true;
+    }
+  });
+  
+  return tokoDitemukan;
+}
+
+/**
+ * Analisa perbandingan harga TAPI hanya untuk toko tertentu
+ */
+function analisaPerbandinganHargaToko(item, tokoFilter) {
+  const hasil = {
+    item: item,
+    analisa: { ecer: null, ambil: null },
+    adaToko: [],
+    kosongToko: [],
+    stokAda: [],
+    stokKosong: [],
+    tokoFilter: tokoFilter,
+  };
+  
+  const dataEcer = [];
+  const dataAmbil = [];
+  
+  // Hanya proses toko yang difilter (atau semua kalau kosong)
+  const tokoUntukDicek = tokoFilter && tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
+  
+  tokoUntukDicek.forEach(function(t) {
+    const h = item.harga[t.kode];
+    if (h.ecer > 0) {
+      dataEcer.push({ toko: t, harga: h.ecer });
+      hasil.adaToko.push(t);
+    } else {
+      hasil.kosongToko.push(t);
+    }
+    if (h.ambil > 0) dataAmbil.push({ toko: t, harga: h.ambil });
+    if (h.stok > 0) hasil.stokAda.push({ toko: t, stok: h.stok });
+    else hasil.stokKosong.push(t);
+  });
+  
+  if (dataEcer.length > 0) {
+    const sortedEcer = dataEcer.sort(function(a, b) { return a.harga - b.harga; });
+    const termurah = sortedEcer[0];
+    const termahal = sortedEcer[sortedEcer.length - 1];
+    const avgEcer = Math.round(sortedEcer.reduce(function(sum, x) { return sum + x.harga; }, 0) / sortedEcer.length);
+    const selisih = termahal.harga - termurah.harga;
+    const persenSelisih = termurah.harga > 0 ? Math.round((selisih / termurah.harga) * 100) : 0;
+    hasil.analisa.ecer = {
+      termurah: termurah, termahal: termahal,
+      rataRata: avgEcer, selisih: selisih, persenSelisih: persenSelisih,
+      semuaSama: sortedEcer.every(function(x) { return x.harga === sortedEcer[0].harga; }),
+      sorted: sortedEcer,
+    };
+  }
+  
+  return hasil;
+}
+
+/**
+ * Format analisa banding harga dengan filter toko
+ */
+function formatAnalisaBandingHargaToko(item, tokoFilter, sender) {
+  const nama = getNama(sender);
+  const suffix = '\n\n' + (nama ? '_Semoga membantu, *' + nama + '*!_ 😊' : '_Semoga membantu!_ 😊');
+  const a = analisaPerbandinganHargaToko(item, tokoFilter);
+  
+  let msg = '📊 *ANALISA PERBANDINGAN HARGA*\n';
+  msg += GARIS_TEBAL + '\n';
+  msg += '🔖 *Kode:* ' + item.kode + '\n';
+  msg += '📦 *Nama:* ' + item.nama + '\n';
+  msg += '🏷️ *Jenis:* ' + (item.jenis || '-') + '\n';
+  msg += '🏗️ *Merek:* ' + (item.merek || '-') + '\n';
+  msg += '📏 *Satuan:* ' + item.satuan + '\n';
+  
+  // Info filter toko
+  if (tokoFilter && tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
+    msg += '🎯 *Toko yang dibandingkan:* ' + tokoFilter.length + ' toko\n';
+    tokoFilter.forEach(function(t) { msg += '   • ' + t.nama + '\n'; });
+  }
+  
+  msg += GARIS_TEBAL + '\n\n';
+  
+  msg += '💰 *HARGA ECER:*\n';
+  msg += GARIS_TIPIS + '\n';
+  
+  const tokoUntukTampil = tokoFilter && tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
+  tokoUntukTampil.forEach(function(t) {
+    const h = item.harga[t.kode];
+    const hargaStr = h.ecer > 0 ? fRp(h.ecer) : '⚠️ Tidak ada harga';
+    msg += '🏪 *' + t.nama + '*\n';
+    msg += '   ' + hargaStr;
+    if (a.analisa.ecer) {
+      if (h.ecer === a.analisa.ecer.termurah.harga && h.ecer > 0) msg += ' 🟢 *TERMURAH*';
+      else if (h.ecer === a.analisa.ecer.termahal.harga && h.ecer > 0 && !a.analisa.ecer.semuaSama) msg += ' 🔴 *TERMAHAL*';
+    }
+    // Info stok kecil
+    const stokInfo = h.stok > 0 ? ' _(stok: ' + h.stok + ')_' : ' _(⚠️ kosong)_';
+    msg += stokInfo + '\n';
+  });
+  msg += '\n';
+  
+  if (a.analisa.ecer) {
+    msg += '📈 *KESIMPULAN:*\n';
+    msg += GARIS_TIPIS + '\n';
+    if (a.analisa.ecer.semuaSama) {
+      msg += '✅ *Harga SAMA* di kedua toko: ' + fRp(a.analisa.ecer.termurah.harga) + '\n';
+    } else {
+      msg += '🟢 *Termurah:* ' + a.analisa.ecer.termurah.toko.nama + '\n';
+      msg += '   ' + fRp(a.analisa.ecer.termurah.harga) + '\n\n';
+      msg += '🔴 *Termahal:* ' + a.analisa.ecer.termahal.toko.nama + '\n';
+      msg += '   ' + fRp(a.analisa.ecer.termahal.harga) + '\n\n';
+      if (tokoUntukTampil.length > 2) {
+        msg += '📊 *Rata-rata:* ' + fRp(a.analisa.ecer.rataRata) + '\n';
+      }
+      msg += '💸 *Selisih:* ' + fRp(a.analisa.ecer.selisih) + ' _(' + a.analisa.ecer.persenSelisih + '% lebih mahal)_\n';
+      msg += '\n💡 *Rekomendasi:*\n';
+      msg += 'Hemat *' + fRp(a.analisa.ecer.selisih) + '* (' + a.analisa.ecer.persenSelisih + '%) ';
+      msg += 'kalau beli di *' + a.analisa.ecer.termurah.toko.nama + '*!';
+    }
+  }
+  
+  msg += '\n\n' + GARIS_TEBAL;
+  return msg + suffix;
+}
+
+/**
+ * Cek apakah pencarian "exact match" (nama persis)
+ * Return: 1 item kalau ada exact match, atau array kalau tidak
+ */
+function cariBarangPrioritas(keyword) {
+  const q = keyword.trim().toUpperCase();
+  
+  // 1. Cek exact match by KODE
+  const byKode = DATA_BARANG.filter(function(d) { return d.kode === q; });
+  if (byKode.length > 0) return { hasil: byKode, exact: true };
+  
+  // 2. Cek exact match by NAMA (full)
+  const byNamaFull = DATA_BARANG.filter(function(d) { return d.nama === q; });
+  if (byNamaFull.length > 0) return { hasil: byNamaFull, exact: true };
+  
+  // 3. Cari yang nama-nya MENGANDUNG keyword PERSIS (semua kata urut)
+  const namaMengandung = DATA_BARANG.filter(function(d) {
+    return d.nama.indexOf(q) >= 0;
+  });
+  if (namaMengandung.length > 0) return { hasil: namaMengandung, exact: true };
+  
+  // 4. Cari semua kata harus ada (tidak urut)
+  const words = q.split(/\s+/).filter(function(w) { return w.length > 0; });
+  const semuaKataAda = DATA_BARANG.filter(function(d) {
+    return words.every(function(w) {
+      return d.nama.indexOf(w) >= 0 || d.kode.indexOf(w) >= 0;
+    });
+  });
+  if (semuaKataAda.length > 0) return { hasil: semuaKataAda, exact: false };
+  
+  // 5. Fallback ke search biasa (fuzzy)
+  return { hasil: cariBarang(keyword).hasil || [], exact: false };
+}
+
 function cariMultipleAnalisa(keyword, jenisAnalisa) {
   const hasil = cariBarang(keyword);
   const items = hasil.hasil || [];
@@ -1788,7 +1989,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ★★★ ANALISA BANDING HARGA ★★★
+       // ★★★ ANALISA BANDING HARGA ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
       log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
       await kirimWA(sender, '📊 _Menganalisa perbandingan harga..._');
@@ -1797,6 +1998,11 @@ app.post('/webhook', async function(req, res) {
         const tanyaTermurah = low.indexOf('murah') >= 0;
         const tanyaTermahal = low.indexOf('mahal') >= 0;
         
+        // ★ DETEKSI TOKO YANG DISEBUT ★
+        const tokoDisebut = deteksiTokoDariTeks(low);
+        log.info('BANDING', 'Toko terdeteksi: ' + tokoDisebut.map(function(t) { return t.kode; }).join(','));
+        
+        // Bersihkan keyword dari kata banding & nama toko
         let keyword = msg
           .replace(/banding(kan)?/gi, '')
           .replace(/termurah|termahal|paling murah|paling mahal/gi, '')
@@ -1805,23 +2011,48 @@ app.post('/webhook', async function(req, res) {
           .replace(/selisih|beda harga|perbedaan harga/gi, '')
           .replace(/analisa harga|analisis harga|compare/gi, '')
           .replace(/di toko|harga|harganya/gi, '')
-          .trim();
+          .replace(/\bdan\b|\bdengan\b|\bvs\b|\batau\b/gi, ' ')
+          .replace(/\bdi\b|\bke\b/gi, ' ');
+        
+        // Hapus nama toko dari keyword juga
+        TOKO_LIST.forEach(function(t) {
+          const regexKode = new RegExp('\\b' + t.kode + '\\b', 'gi');
+          keyword = keyword.replace(regexKode, '');
+          t.alias.forEach(function(a) {
+            const regexAlias = new RegExp('\\b' + a + '\\b', 'gi');
+            keyword = keyword.replace(regexAlias, '');
+          });
+          // Hapus kata-kata dari nama toko juga
+          const kataNama = t.nama.toLowerCase().split(/\s+/);
+          kataNama.forEach(function(kn) {
+            if (kn.length >= 4) {
+              const regex = new RegExp('\\b' + kn + '\\b', 'gi');
+              keyword = keyword.replace(regex, '');
+            }
+          });
+        });
+        
+        keyword = keyword.trim().replace(/\s+/g, ' ');
+        log.info('BANDING', 'Keyword bersih: "' + keyword + '"');
         
         if (!keyword || keyword.length < 2) {
-          await kirimWA(sender, '⚠️ *Format kurang jelas*\n\n💡 Contoh yang benar:\n• _bandingkan harga NN00001_\n• _panci eagle termurah_\n• _selisih harga dandang_\n• _analisa harga golden_');
+          await kirimWA(sender, '⚠️ *Format kurang jelas*\n\n💡 Contoh yang benar:\n• _bandingkan harga NN00001_\n• _panci eagle termurah_\n• _selisih harga dandang di nk dan tdm_\n• _analisa harga golden di kefa cp_');
           return;
         }
         
-        const hasilCari = cariBarang(keyword);
+        // ★ PAKAI PENCARIAN PRIORITAS ★
+        const hasilCari = cariBarangPrioritas(keyword);
         const items = hasilCari.hasil || [];
         
         if (items.length === 0) {
-          if (hasilCari.saran && hasilCari.saran.length > 0) {
+          // Coba search biasa untuk dapat saran
+          const hasilFuzzy = cariBarang(keyword);
+          if (hasilFuzzy.saran && hasilFuzzy.saran.length > 0) {
             let resp = '🤔 *Tidak ditemukan persis*\n' + GARIS_TEBAL + '\n\n💡 Mungkin maksud kamu:\n\n';
-            hasilCari.saran.slice(0, 5).forEach(function(d, i) {
+            hasilFuzzy.saran.slice(0, 5).forEach(function(d, i) {
               resp += '*' + (i + 1) + '.* ' + d.nama + ' (' + d.kode + ')\n';
             });
-            resp += '\n💡 Ketik kode atau coba kata kunci lain';
+            resp += '\n💡 Ketik kode untuk detail';
             await kirimWA(sender, resp);
             return;
           }
@@ -1829,23 +2060,109 @@ app.post('/webhook', async function(req, res) {
           return;
         }
         
+        // ★ JIKA 1 ITEM EXACT MATCH → langsung analisa detail dengan filter toko ★
         if (items.length === 1) {
-          await kirimWA(sender, formatAnalisaBandingHarga(items[0], sender));
+          await kirimWA(sender, formatAnalisaBandingHargaToko(items[0], tokoDisebut, sender));
           return;
         }
         
-        const jenisAnalisa = tanyaTermurah ? 'termurah' : tanyaTermahal ? 'termahal' : 'banding';
-        const multipleItems = cariMultipleAnalisa(keyword, jenisAnalisa);
-        
-        if (multipleItems && multipleItems.length > 0) {
-          await kirimWA(sender, formatMultipleBanding(multipleItems, jenisAnalisa, keyword, sender));
-          if (multipleItems.length === 1) {
-            await tunggu(1000);
-            await kirimWA(sender, formatAnalisaBandingHarga(multipleItems[0].item, sender));
+        // ★ JIKA ADA TOKO SPESIFIK & BANYAK ITEM → cari yang paling cocok ★
+        // Prioritaskan item yang nama-nya paling pendek/spesifik
+        if (hasilCari.exact && items.length > 1) {
+          // Sort by panjang nama (yang pendek = lebih spesifik)
+          items.sort(function(a, b) { return a.nama.length - b.nama.length; });
+          
+          // Kalau item pertama nama-nya match dengan keyword PERSIS, ambil itu saja
+          const keywordU = keyword.toUpperCase().trim();
+          const exactMatch = items.find(function(d) { return d.nama === keywordU; });
+          if (exactMatch) {
+            await kirimWA(sender, formatAnalisaBandingHargaToko(exactMatch, tokoDisebut, sender));
+            return;
           }
-        } else {
-          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid untuk dibandingkan');
+          
+          // Kalau hanya 2-3 hasil dan exact match → tampilkan banding dengan filter toko
+          if (items.length <= 3) {
+            for (let i = 0; i < items.length; i++) {
+              await kirimWA(sender, formatAnalisaBandingHargaToko(items[i], tokoDisebut, sender));
+              if (i < items.length - 1) await tunggu(1000);
+            }
+            return;
+          }
         }
+        
+        // ★ BANYAK ITEM → tampilkan top 5 dengan filter toko ★
+        const jenisAnalisa = tanyaTermurah ? 'termurah' : tanyaTermahal ? 'termahal' : 'banding';
+        
+        // Filter items: hanya yang punya harga di toko yang diminta
+        let itemsForAnalisa = items;
+        if (tokoDisebut.length > 0) {
+          itemsForAnalisa = items.filter(function(item) {
+            return tokoDisebut.some(function(t) { return item.harga[t.kode].ecer > 0; });
+          });
+        }
+        
+        if (itemsForAnalisa.length === 0) {
+          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid di toko yang diminta.\n\nCoba tanya tanpa filter toko, contoh:\n_bandingkan dandang eagle 20_');
+          return;
+        }
+        
+        // Build multiple analisa dengan filter toko
+        const multipleItems = itemsForAnalisa.map(function(item) {
+          const a = analisaPerbandinganHargaToko(item, tokoDisebut);
+          return {
+            item: item,
+            analisa: a,
+            minHarga: a.analisa.ecer ? a.analisa.ecer.termurah.harga : 999999999,
+            maxHarga: a.analisa.ecer ? a.analisa.ecer.termahal.harga : 0,
+          };
+        }).filter(function(x) { return x.analisa.analisa.ecer !== null; });
+        
+        if (multipleItems.length === 0) {
+          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid untuk dibandingkan');
+          return;
+        }
+        
+        // Sort sesuai jenis analisa
+        if (jenisAnalisa === 'termurah') multipleItems.sort(function(a, b) { return a.minHarga - b.minHarga; });
+        else if (jenisAnalisa === 'termahal') multipleItems.sort(function(a, b) { return b.maxHarga - a.maxHarga; });
+        
+        // Format hasil multiple
+        const judul = jenisAnalisa === 'termurah' ? '🟢 TOP TERMURAH' : 
+                      jenisAnalisa === 'termahal' ? '🔴 TOP TERMAHAL' : 
+                      '📊 PERBANDINGAN HARGA';
+        const nama = getNama(sender);
+        const suffix = '\n\n' + (nama ? '_Semoga membantu, *' + nama + '*!_ 😊' : '_Semoga membantu!_ 😊');
+        
+        let respMulti = judul + '\n';
+        respMulti += GARIS_TEBAL + '\n';
+        respMulti += '🔍 Pencarian: _"' + keyword + '"_\n';
+        if (tokoDisebut.length > 0) {
+          respMulti += '🎯 Toko: ' + tokoDisebut.map(function(t) { return t.nama; }).join(', ') + '\n';
+        }
+        respMulti += '📦 Ditemukan: ' + multipleItems.length + ' barang\n';
+        respMulti += GARIS_TEBAL + '\n\n';
+        
+        const top = multipleItems.slice(0, 5);
+        top.forEach(function(x, i) {
+          const item = x.item;
+          const a = x.analisa.analisa.ecer;
+          respMulti += '*' + (i + 1) + '. ' + item.nama + '*\n';
+          respMulti += '   🔖 ' + item.kode + ' | ' + item.satuan + '\n';
+          if (a.semuaSama) {
+            respMulti += '   💰 ' + fRp(a.termurah.harga) + ' _(sama di semua)_\n';
+          } else {
+            respMulti += '   🟢 Termurah: ' + fRp(a.termurah.harga) + ' _(di ' + a.termurah.toko.nama + ')_\n';
+            respMulti += '   🔴 Termahal: ' + fRp(a.termahal.harga) + ' _(di ' + a.termahal.toko.nama + ')_\n';
+            respMulti += '   💸 Selisih: ' + fRp(a.selisih) + ' (' + a.persenSelisih + '%)\n';
+          }
+          respMulti += '\n';
+        });
+        
+        if (multipleItems.length > 5) respMulti += '_+' + (multipleItems.length - 5) + ' barang lainnya_\n\n';
+        respMulti += GARIS_TEBAL + '\n';
+        respMulti += '💡 Ketik kode barang untuk detail lengkap';
+        
+        await kirimWA(sender, respMulti + suffix);
         return;
         
       } catch (e) {
@@ -1854,7 +2171,6 @@ app.post('/webhook', async function(req, res) {
         return;
       }
     }
-
     // ★★★ AI CHAT BARANG ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
       log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
