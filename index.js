@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 3.12 - Fix Sesi Reset + Multi-AI + Konfirmasi Toko
+//   Versi 3.13 - Scan Foto Multi-Step + All Features
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -70,7 +70,7 @@ const TOKO_LIST = [
   { kode: 'tdm',    nama: 'Perabot Mama TDM',          alias: ['tdm', 'mama tdm'] },
   { kode: 'oesapa', nama: 'Perabot Mama Oesapa',       alias: ['oesapa', 'mama oesapa'] },
   { kode: 'kefa',   nama: 'Perabot Mamaku Kefamenanu', alias: ['kefa', 'mamaku', 'kefamenanu'] },
-  { kode: 'cp',     nama: 'Central Perabot',           alias: ['cp', 'central'] },
+  { kode: 'cp',     nama: 'Central Perabot',           alias: ['cp', 'central', 'alak'] },
 ];
 
 const TOKO_COLS = {
@@ -145,6 +145,87 @@ const KASIR_CP_DEFAULT = {
   k3: 'Febri-Jien-Tika',
   k4: 'Delfi-Tirsa',
 };
+
+// ★★★ SCAN FOTO STEPS PER TOKO ★★★
+const SCAN_STEPS = {
+  nk: [
+    { step: 1, label: 'Kassa 1', fields: ['k1'], scanField: 'total_transaksi' },
+    { step: 2, label: 'Kassa 2', fields: ['k2'], scanField: 'total_transaksi' },
+    { step: 3, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
+    { step: 4, label: 'Ecer', fields: ['ecer'], scanField: 'total_transaksi' },
+    { step: 5, label: 'Grosir', fields: ['grosir'], scanField: 'total_transaksi' },
+  ],
+  tdm: [
+    { step: 1, label: 'Kassa 1', fields: ['k1'], scanField: 'total_transaksi' },
+    { step: 2, label: 'Kassa 2', fields: ['k2'], scanField: 'total_transaksi' },
+    { step: 3, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
+  ],
+  oesapa: [
+    { step: 1, label: 'Kassa 1', fields: ['k1'], scanField: 'total_transaksi' },
+    { step: 2, label: 'Kassa 2', fields: ['k2'], scanField: 'total_transaksi' },
+    { step: 3, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
+  ],
+  kefa: [
+    { step: 1, label: 'Kassa 1', fields: ['k1'], scanField: 'total_transaksi' },
+    { step: 2, label: 'Kassa 2', fields: ['k2'], scanField: 'total_transaksi' },
+    { step: 3, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
+  ],
+  cp: [
+    { step: 1, label: 'Kassa 1 (Yuni-Salsa)', fields: ['k1'], scanField: 'total_transaksi' },
+    { step: 2, label: 'Kassa 2 (Nanda-Umi-Marselina)', fields: ['k2'], scanField: 'total_transaksi' },
+    { step: 3, label: 'Kassa 3 (Febri-Jien-Tika)', fields: ['k3'], scanField: 'total_transaksi' },
+    { step: 4, label: 'Kassa 4 (Delfi-Tirsa)', fields: ['k4'], scanField: 'total_transaksi' },
+    { step: 5, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
+    { step: 6, label: 'Ecer', fields: ['ecer'], scanField: 'total_transaksi' },
+    { step: 7, label: 'Grosir', fields: ['grosir'], scanField: 'total_transaksi' },
+    { step: 8, label: 'Kasir Promo (Total + Tunai + Debit + Credit)', fields: ['promo', 'promotunai', 'promodebit', 'promokredit'], scanField: 'multi_promo' },
+    { step: 9, label: 'Parkir di Komputer', fields: ['parkirkomputer'], scanField: 'manual' },
+    { step: 10, label: 'Parkir Stor Luar', fields: ['parkirluar'], scanField: 'manual' },
+  ],
+};
+
+// Prompt scan per type
+const SCAN_PROMPTS = {
+  total_transaksi: 'Baca gambar tabel laporan penjualan iPos. Cari baris TOTAL (paling bawah). Ambil angka dari kolom "Total Transaksi" pada baris TOTAL.\n\nJawab HANYA dengan angka saja (tanpa Rp, tanpa titik, tanpa koma, tanpa teks lain).\n\nContoh jawaban yang BENAR:\n15741500\n\nContoh jawaban yang SALAH:\nRp 15.741.500\nTotal: 15.741.500\nTotal transaksi adalah 15741500\n\nSekarang baca dan jawab dengan angka saja:',
+  
+  multi: 'Baca gambar tabel laporan penjualan iPos. Cari baris TOTAL (paling bawah tabel).\n\nAmbil 4 angka berikut dari baris TOTAL:\n1. "Total Transaksi" → total\n2. "Jml Bayar Tunai" → tunai\n3. "Jml Bayar K.Debit" → debit\n4. "Jml Bayar Kredit" atau "Jml Bayar K.Kredit" → kredit\n\nJawab dengan format PERSIS seperti ini (hanya angka, tanpa Rp/titik/koma):\n\ntotal: 40899000\ntunai: 26326500\ndebit: 14254500\nkredit: 318000\n\nKalau ada nilai 0 atau kosong, tulis: 0\n\nSekarang baca gambar dan jawab:',
+  
+  multi_promo: 'Baca gambar tabel laporan penjualan KASIR PROMO. Cari baris TOTAL (paling bawah).\n\nAmbil 4 angka berikut dari baris TOTAL:\n1. "Total Transaksi" → promo\n2. "Jml Bayar Tunai" → promotunai\n3. "Jml Bayar K.Debit" → promodebit\n4. "Jml Bayar Kredit" atau "Jml Bayar K.Kredit" → promokredit\n\nJawab dengan format PERSIS seperti ini (hanya angka):\n\npromo: 1675000\npromotunai: 1675000\npromodebit: 0\npromokredit: 0\n\nSekarang baca gambar dan jawab:',
+};
+
+function getScanStep(tokoKode, currentStep) {
+  const steps = SCAN_STEPS[tokoKode];
+  if (!steps) return null;
+  if (currentStep >= steps.length) return null;
+  return steps[currentStep];
+}
+
+function parseScanSingle(aiResponse) {
+  if (!aiResponse) return 0;
+  const angka = aiResponse.replace(/[^0-9]/g, '');
+  if (!angka || angka.length < 1) return 0;
+  return parseInt(angka) || 0;
+}
+
+function parseScanMulti(aiResponse, fields) {
+  const hasil = {};
+  fields.forEach(function(f) { hasil[f] = 0; });
+  if (!aiResponse) return hasil;
+  
+  const lines = aiResponse.split('\n');
+  lines.forEach(function(line) {
+    const lower = line.toLowerCase().trim();
+    fields.forEach(function(f) {
+      const fLow = f.toLowerCase();
+      if (lower.startsWith(fLow + ':') || lower.startsWith(fLow + ' :') || lower.startsWith('- ' + fLow)) {
+        const angkaPart = line.substring(line.indexOf(':') + 1).trim();
+        const angka = angkaPart.replace(/[^0-9]/g, '');
+        if (angka) hasil[f] = parseInt(angka) || 0;
+      }
+    });
+  });
+  return hasil;
+}
 
 const DEFAULT_MEMBERS = [
   '6285253949803','6285737005301','6285211988252','6281383924057',
@@ -269,7 +350,6 @@ function getSesi(nomor) {
   return SESI[nomor]; 
 }
 
-// ★★★ RESET SESI TOTAL — DELETE & RECREATE ★★★
 function resetSesi(nomor) { 
   delete SESI[nomor];
   SESI[nomor] = { _lastActive: Date.now() };
@@ -291,7 +371,6 @@ setInterval(function() {
   });
   if (buang > 0) saveJSON(CONFIG.paths.sesi, SESI);
 }, 5 * 60 * 1000);
-
 // ════════════════════════════════════════════════════════════════
 //   5. EXCEL & SMART SEARCH
 // ════════════════════════════════════════════════════════════════
@@ -474,26 +553,21 @@ function updateStok(kode, tokoKode, jumlah) {
 }
 
 loadExcel();
+
 // ════════════════════════════════════════════════════════════════
-//   6. ANALISA PERBANDINGAN HARGA
+//   6. ANALISA BANDING HARGA
 // ════════════════════════════════════════════════════════════════
 
-function analisaPerbandinganHarga(item) {
-  return analisaPerbandinganHargaToko(item, null);
-}
+function analisaPerbandinganHarga(item) { return analisaPerbandinganHargaToko(item, null); }
 
 function analisaPerbandinganHargaToko(item, tokoFilter) {
   const hasil = {
-    item: item,
-    analisa: { ecer: null, ambil: null },
-    adaToko: [], kosongToko: [],
-    stokAda: [], stokKosong: [],
-    tokoFilter: tokoFilter,
+    item: item, analisa: { ecer: null, ambil: null },
+    adaToko: [], kosongToko: [], stokAda: [], stokKosong: [], tokoFilter: tokoFilter,
   };
   const dataEcer = [];
   const dataAmbil = [];
   const tokoUntukDicek = tokoFilter && tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
-  
   tokoUntukDicek.forEach(function(t) {
     const h = item.harga[t.kode];
     if (h.ecer > 0) { dataEcer.push({ toko: t, harga: h.ecer }); hasil.adaToko.push(t); }
@@ -502,11 +576,9 @@ function analisaPerbandinganHargaToko(item, tokoFilter) {
     if (h.stok > 0) hasil.stokAda.push({ toko: t, stok: h.stok });
     else hasil.stokKosong.push(t);
   });
-  
   if (dataEcer.length > 0) {
     const sortedEcer = dataEcer.sort(function(a, b) { return a.harga - b.harga; });
-    const termurah = sortedEcer[0];
-    const termahal = sortedEcer[sortedEcer.length - 1];
+    const termurah = sortedEcer[0]; const termahal = sortedEcer[sortedEcer.length - 1];
     const avgEcer = Math.round(sortedEcer.reduce(function(sum, x) { return sum + x.harga; }, 0) / sortedEcer.length);
     const selisih = termahal.harga - termurah.harga;
     const persenSelisih = termurah.harga > 0 ? Math.round((selisih / termurah.harga) * 100) : 0;
@@ -516,19 +588,6 @@ function analisaPerbandinganHargaToko(item, tokoFilter) {
       sorted: sortedEcer,
     };
   }
-  if (dataAmbil.length > 0) {
-    const sortedAmbil = dataAmbil.sort(function(a, b) { return a.harga - b.harga; });
-    const termurah = sortedAmbil[0];
-    const termahal = sortedAmbil[sortedAmbil.length - 1];
-    const avgAmbil = Math.round(sortedAmbil.reduce(function(sum, x) { return sum + x.harga; }, 0) / sortedAmbil.length);
-    const selisih = termahal.harga - termurah.harga;
-    const persenSelisih = termurah.harga > 0 ? Math.round((selisih / termurah.harga) * 100) : 0;
-    hasil.analisa.ambil = {
-      termurah, termahal, rataRata: avgAmbil, selisih, persenSelisih,
-      semuaSama: sortedAmbil.every(function(x) { return x.harga === sortedAmbil[0].harga; }),
-      sorted: sortedAmbil,
-    };
-  }
   return hasil;
 }
 
@@ -536,52 +595,37 @@ function formatAnalisaBandingHargaToko(item, tokoFilter, sender) {
   const nama = getNama(sender);
   const suffix = '\n\n' + (nama ? '_Semoga membantu, *' + nama + '*!_ 😊' : '_Semoga membantu!_ 😊');
   const a = analisaPerbandinganHargaToko(item, tokoFilter);
-  
-  let msg = '📊 *ANALISA PERBANDINGAN HARGA*\n';
-  msg += GARIS_TEBAL + '\n';
-  msg += '🔖 *Kode:* ' + item.kode + '\n';
-  msg += '📦 *Nama:* ' + item.nama + '\n';
-  msg += '🏷️ *Jenis:* ' + (item.jenis || '-') + '\n';
-  msg += '🏗️ *Merek:* ' + (item.merek || '-') + '\n';
+  let msg = '📊 *ANALISA PERBANDINGAN HARGA*\n' + GARIS_TEBAL + '\n';
+  msg += '🔖 *Kode:* ' + item.kode + '\n📦 *Nama:* ' + item.nama + '\n';
+  msg += '🏷️ *Jenis:* ' + (item.jenis || '-') + '\n🏗️ *Merek:* ' + (item.merek || '-') + '\n';
   msg += '📏 *Satuan:* ' + item.satuan + '\n';
   if (tokoFilter && tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
     msg += '🎯 *Toko yang dibandingkan:* ' + tokoFilter.length + ' toko\n';
     tokoFilter.forEach(function(t) { msg += '   • ' + t.nama + '\n'; });
   }
-  msg += GARIS_TEBAL + '\n\n';
-  
-  msg += '💰 *HARGA ECER:*\n';
-  msg += GARIS_TIPIS + '\n';
+  msg += GARIS_TEBAL + '\n\n💰 *HARGA ECER:*\n' + GARIS_TIPIS + '\n';
   const tokoUntukTampil = tokoFilter && tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
   tokoUntukTampil.forEach(function(t) {
     const h = item.harga[t.kode];
     const hargaStr = h.ecer > 0 ? fRp(h.ecer) : '⚠️ Tidak ada harga';
-    msg += '🏪 *' + t.nama + '*\n';
-    msg += '   ' + hargaStr;
+    msg += '🏪 *' + t.nama + '*\n   ' + hargaStr;
     if (a.analisa.ecer) {
       if (h.ecer === a.analisa.ecer.termurah.harga && h.ecer > 0) msg += ' 🟢 *TERMURAH*';
       else if (h.ecer === a.analisa.ecer.termahal.harga && h.ecer > 0 && !a.analisa.ecer.semuaSama) msg += ' 🔴 *TERMAHAL*';
     }
-    const stokInfo = h.stok > 0 ? ' _(stok: ' + h.stok + ')_' : ' _(⚠️ kosong)_';
-    msg += stokInfo + '\n';
+    msg += (h.stok > 0 ? ' _(stok: ' + h.stok + ')_' : ' _(⚠️ kosong)_') + '\n';
   });
   msg += '\n';
-  
   if (a.analisa.ecer) {
-    msg += '📈 *KESIMPULAN:*\n';
-    msg += GARIS_TIPIS + '\n';
+    msg += '📈 *KESIMPULAN:*\n' + GARIS_TIPIS + '\n';
     if (a.analisa.ecer.semuaSama) {
       msg += '✅ *Harga SAMA*: ' + fRp(a.analisa.ecer.termurah.harga) + '\n';
     } else {
-      msg += '🟢 *Termurah:* ' + a.analisa.ecer.termurah.toko.nama + '\n';
-      msg += '   ' + fRp(a.analisa.ecer.termurah.harga) + '\n\n';
-      msg += '🔴 *Termahal:* ' + a.analisa.ecer.termahal.toko.nama + '\n';
-      msg += '   ' + fRp(a.analisa.ecer.termahal.harga) + '\n\n';
+      msg += '🟢 *Termurah:* ' + a.analisa.ecer.termurah.toko.nama + '\n   ' + fRp(a.analisa.ecer.termurah.harga) + '\n\n';
+      msg += '🔴 *Termahal:* ' + a.analisa.ecer.termahal.toko.nama + '\n   ' + fRp(a.analisa.ecer.termahal.harga) + '\n\n';
       if (tokoUntukTampil.length > 2) msg += '📊 *Rata-rata:* ' + fRp(a.analisa.ecer.rataRata) + '\n';
       msg += '💸 *Selisih:* ' + fRp(a.analisa.ecer.selisih) + ' _(' + a.analisa.ecer.persenSelisih + '% lebih mahal)_\n';
-      msg += '\n💡 *Rekomendasi:*\n';
-      msg += 'Hemat *' + fRp(a.analisa.ecer.selisih) + '* (' + a.analisa.ecer.persenSelisih + '%) ';
-      msg += 'kalau beli di *' + a.analisa.ecer.termurah.toko.nama + '*!';
+      msg += '\n💡 *Rekomendasi:*\nHemat *' + fRp(a.analisa.ecer.selisih) + '* (' + a.analisa.ecer.persenSelisih + '%) kalau beli di *' + a.analisa.ecer.termurah.toko.nama + '*!';
     }
   }
   msg += '\n\n' + GARIS_TEBAL;
@@ -589,14 +633,7 @@ function formatAnalisaBandingHargaToko(item, tokoFilter, sender) {
 }
 
 function isPertanyaanBanding(low) {
-  const KATA_BANDING = [
-    'banding', 'bandingkan', 'compare', 'komparasi',
-    'termurah', 'termahal', 'paling murah', 'paling mahal',
-    'lebih murah', 'lebih mahal', 'mana yang murah', 'mana yang mahal',
-    'dimana murah', 'dimana mahal',
-    'selisih', 'beda harga', 'perbedaan harga',
-    'analisa harga', 'analisis harga',
-  ];
+  const KATA_BANDING = ['banding','bandingkan','compare','komparasi','termurah','termahal','paling murah','paling mahal','lebih murah','lebih mahal','mana yang murah','mana yang mahal','dimana murah','dimana mahal','selisih','beda harga','perbedaan harga','analisa harga','analisis harga'];
   return KATA_BANDING.some(function(k) { return low.indexOf(k) >= 0; });
 }
 
@@ -646,12 +683,7 @@ function deteksiTokoDariTeks(low) {
 }
 
 function isKonfirmasiYa(low) {
-  const KATA_YA = [
-    'iya', 'ya', 'yes', 'yup', 'yep', 'yoi', 'oke', 'ok', 'okey', 'okay',
-    'betul', 'bener', 'benar', 'sip', 'siap', 'silakan', 'silahkan',
-    'lanjut', 'lanjutkan', 'gas', 'mau', 'boleh', 'setuju',
-    'tentu', 'pasti', 'cocok', 'mantap', 'pindah',
-  ];
+  const KATA_YA = ['iya','ya','yes','yup','yep','yoi','oke','ok','okey','okay','betul','bener','benar','sip','siap','silakan','silahkan','lanjut','lanjutkan','gas','mau','boleh','setuju','tentu','pasti','cocok','mantap','pindah'];
   const cleaned = low.trim().toLowerCase();
   if (KATA_YA.indexOf(cleaned) >= 0) return true;
   for (let i = 0; i < KATA_YA.length; i++) {
@@ -662,10 +694,7 @@ function isKonfirmasiYa(low) {
 }
 
 function isKonfirmasiTidak(low) {
-  const KATA_TIDAK = [
-    'tidak', 'tdk', 'tdak', 'no', 'nope', 'engga', 'enggak', 'ga', 'gak',
-    'jangan', 'jgn', 'salah', 'bukan', 'tetap', 'tetap di sini',
-  ];
+  const KATA_TIDAK = ['tidak','tdk','tdak','no','nope','engga','enggak','ga','gak','jangan','jgn','salah','bukan','tetap','tetap di sini'];
   const cleaned = low.trim().toLowerCase();
   if (KATA_TIDAK.indexOf(cleaned) >= 0) return true;
   for (let i = 0; i < KATA_TIDAK.length; i++) {
@@ -680,15 +709,11 @@ function bersihkanKeywordDariToko(pesan) {
     const regexKode = new RegExp('\\b' + t.kode + '\\b', 'gi');
     cleaned = cleaned.replace(regexKode, '');
     t.alias.forEach(function(a) {
-      const regexAlias = new RegExp('\\b' + a + '\\b', 'gi');
-      cleaned = cleaned.replace(regexAlias, '');
+      cleaned = cleaned.replace(new RegExp('\\b' + a + '\\b', 'gi'), '');
     });
     const kataNama = t.nama.toLowerCase().split(/\s+/);
     kataNama.forEach(function(kn) {
-      if (kn.length >= 4) {
-        const regex = new RegExp('\\b' + kn + '\\b', 'gi');
-        cleaned = cleaned.replace(regex, '');
-      }
+      if (kn.length >= 4) cleaned = cleaned.replace(new RegExp('\\b' + kn + '\\b', 'gi'), '');
     });
   });
   cleaned = cleaned.replace(/\b(di|ke|untuk|toko|cek|cari|harga|stok)\b/gi, ' ');
@@ -746,19 +771,11 @@ function rotateGeminiKey() {
 async function chatGroq(prompt) {
   if (!CONFIG.groqKey) return null;
   try {
-    const resp = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
+    const resp = await axios.post('https://api.groq.com/openai/v1/chat/completions',
       { model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1500 },
-      { headers: { 'Authorization': 'Bearer ' + CONFIG.groqKey, 'Content-Type': 'application/json' }, timeout: 30000 }
-    );
-    const jawaban = resp.data.choices[0].message.content || '';
-    log.info('GROQ', 'OK, length: ' + jawaban.length);
-    return jawaban.trim();
-  } catch (err) {
-    const status = err.response ? err.response.status : 'NETWORK';
-    log.warn('GROQ', 'Gagal (' + status + ')');
-    return null;
-  }
+      { headers: { 'Authorization': 'Bearer ' + CONFIG.groqKey, 'Content-Type': 'application/json' }, timeout: 30000 });
+    return (resp.data.choices[0].message.content || '').trim();
+  } catch (err) { log.warn('GROQ', 'Gagal: ' + err.message); return null; }
 }
 
 async function chatGemini(prompt) {
@@ -767,9 +784,7 @@ async function chatGemini(prompt) {
   for (let i = 0; i < keys.length; i++) {
     try {
       const resp = await axios.post(geminiUrl(), { contents: [{ parts: [{ text: prompt }] }] }, { timeout: 30000 });
-      const jawaban = resp.data.candidates[0].content.parts[0].text || '';
-      log.info('GEMINI', 'OK key #' + (currentGeminiKeyIndex + 1));
-      return jawaban.trim();
+      return (resp.data.candidates[0].content.parts[0].text || '').trim();
     } catch (err) {
       const status = err.response ? err.response.status : 'NETWORK';
       log.warn('GEMINI', 'Gagal key #' + (currentGeminiKeyIndex + 1) + ' (' + status + ')');
@@ -783,18 +798,11 @@ async function chatGemini(prompt) {
 async function chatOpenRouter(prompt) {
   if (!CONFIG.openrouterKey) return null;
   try {
-    const resp = await axios.post(
-      'https://openrouter.ai/api/v1/chat/completions',
+    const resp = await axios.post('https://openrouter.ai/api/v1/chat/completions',
       { model: 'meta-llama/llama-3.2-3b-instruct:free', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1500 },
-      { headers: { 'Authorization': 'Bearer ' + CONFIG.openrouterKey, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://github.com/dimassilitonga99/bot-whatsapp', 'X-Title': 'Bot Toko Perabot' }, timeout: 30000 }
-    );
-    const jawaban = resp.data.choices[0].message.content || '';
-    log.info('OPENROUTER', 'OK');
-    return jawaban.trim();
-  } catch (err) {
-    log.warn('OPENROUTER', 'Gagal: ' + err.message);
-    return null;
-  }
+      { headers: { 'Authorization': 'Bearer ' + CONFIG.openrouterKey, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://github.com/dimassilitonga99/bot-whatsapp', 'X-Title': 'Bot Toko Perabot' }, timeout: 30000 });
+    return (resp.data.choices[0].message.content || '').trim();
+  } catch (err) { log.warn('OPENROUTER', 'Gagal: ' + err.message); return null; }
 }
 
 async function chatAI(prompt) {
@@ -814,6 +822,10 @@ async function chatAI(prompt) {
   return null;
 }
 
+// ════════════════════════════════════════════════════════════════
+//   10. ★★★ SCAN GAMBAR (untuk laporan & search) ★★★
+// ════════════════════════════════════════════════════════════════
+
 async function analisaGambar(imageUrl, prompt) {
   const imgResp   = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
   const mimeType  = imgResp.headers['content-type'] || 'image/jpeg';
@@ -827,31 +839,15 @@ async function analisaGambar(imageUrl, prompt) {
       return resp.data.candidates[0].content.parts[0].text || '';
     } catch (err) {
       const status = err.response ? err.response.status : 'NETWORK';
+      log.warn('GEMINI_IMG', 'Gagal key #' + (currentGeminiKeyIndex + 1) + ' (' + status + ')');
       if (status === 429 && keys.length > 1) { rotateGeminiKey(); continue; }
       throw err;
     }
   }
   throw new Error('Semua Gemini key gagal');
 }
-
-function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
-  const fmt = ' Format WhatsApp dengan emoji. Format rupiah Rp X.XXX.XXX.';
-  if (menuType === 1) {
-    if (tokoKode === 'cp') return 'Baca data penjualan toko Central Perabot tanggal ' + tanggal + '. Format: 4 kassa (Kassa 1 Yuni-Salsa, Kassa 2 Nanda-Umi-Marselina, Kassa 3 Febri-Jien-Tika, Kassa 4 Delfi-Tirsa), total keseluruhan, metode bayar, jenis penjualan, kasir promo, parkir.' + fmt;
-    if (tokoKode === 'nk') return 'Baca data penjualan toko Nasional Kitchen tanggal ' + tanggal + '. Format: 2 kassa, total, metode bayar, jenis penjualan. Rupiah: Rp. X.XXX.XXX.' + fmt;
-    if (tokoKode === 'tdm' || tokoKode === 'oesapa' || tokoKode === 'kefa') {
-      const tNama = tokoKode === 'tdm' ? 'Perabot Mama TDM' : tokoKode === 'oesapa' ? 'Perabot Mama Oesapa' : 'Perabot Mamaku Kefamenanu';
-      return 'Baca data penjualan toko ' + tNama + ' tanggal ' + tanggal + '. Format: 2-3 kassa, total, metode bayar TANPA Ecer/Grosir. Rupiah: Rp. X.XXX.XXX.' + fmt;
-    }
-    return 'Baca data penjualan toko "' + namaToko + '" tanggal ' + tanggal + '. Buat laporan: kassa, total, metode bayar, jenis penjualan.' + fmt;
-  }
-  if (menuType === 2) return 'Baca data harga barang toko "' + namaToko + '" tanggal ' + tanggal + '. Buat laporan: barang baru, naik harga, turun harga.' + fmt;
-  if (menuType === 3) return 'Baca data marketplace tanggal ' + tanggal + '. Buat laporan: per toko, per channel, metode bayar.' + fmt;
-  return 'Buat laporan rapi.' + fmt;
-}
-
 // ════════════════════════════════════════════════════════════════
-//   10. AI CHAT BARANG
+//   11. AI CHAT BARANG
 // ════════════════════════════════════════════════════════════════
 
 function cariRelevan(pertanyaan, maxResults) {
@@ -865,18 +861,16 @@ function cariRelevan(pertanyaan, maxResults) {
     let score = 0;
     const namaBersih = bersihkanTeks(item.nama);
     const merekBersih = bersihkanTeks(item.merek);
-    const jenisBersih = bersihkanTeks(item.jenis);
     const namaWords = namaBersih.split(/\s+/);
     words.forEach(function(w) {
       if (namaBersih.indexOf(w) >= 0) score += 10;
       if (merekBersih.indexOf(w) >= 0) score += 8;
-      if (jenisBersih.indexOf(w) >= 0) score += 6;
       if (item.kode.indexOf(w) >= 0) score += 15;
       for (let i = 0; i < namaWords.length; i++) {
         if (kataMirip(w, namaWords[i])) { score += 5; break; }
       }
     });
-    if (score > 0) scored.push({ item: item, score: score });
+    if (score > 0) scored.push({ item, score });
   });
   scored.sort(function(a, b) { return b.score - a.score; });
   return scored.slice(0, maxResults).map(function(s) { return s.item; });
@@ -884,8 +878,6 @@ function cariRelevan(pertanyaan, maxResults) {
 
 async function aiChatBarang(pertanyaan, sender, tokoAktif) {
   let relevantItems = cariRelevan(pertanyaan, 30);
-  if (relevantItems.length === 0) relevantItems = [];
-  
   let tokoFilter = [];
   if (tokoAktif) {
     const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
@@ -893,165 +885,118 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
   } else {
     tokoFilter = deteksiTokoDariTeks(pertanyaan.toLowerCase());
   }
-  
   let context = '';
   if (relevantItems.length > 0) {
     relevantItems.forEach(function(d, i) {
-      context += (i + 1) + '. Kode: ' + d.kode + ' | Nama: ' + d.nama;
-      if (d.jenis) context += ' | Jenis: ' + d.jenis;
-      if (d.merek) context += ' | Merek: ' + d.merek;
-      context += ' | Satuan: ' + d.satuan + '\n';
-      context += '   Harga & Stok:\n';
-      const tokoUntukShow = tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
-      tokoUntukShow.forEach(function(t) {
+      context += (i + 1) + '. Kode: ' + d.kode + ' | Nama: ' + d.nama + ' | Satuan: ' + d.satuan + '\n';
+      const tokoShow = tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
+      tokoShow.forEach(function(t) {
         const h = d.harga[t.kode];
-        const stok = h.stok > 0 ? h.stok : 'KOSONG';
-        context += '   - ' + t.nama + ': Ecer Rp' + h.ecer.toLocaleString('id-ID') + 
-                   ', Ambil Rp' + h.ambil.toLocaleString('id-ID') + ', Stok: ' + stok + '\n';
+        context += '   - ' + t.nama + ': Ecer Rp' + h.ecer.toLocaleString('id-ID') + ', Ambil Rp' + h.ambil.toLocaleString('id-ID') + ', Stok: ' + (h.stok > 0 ? h.stok : 'KOSONG') + '\n';
       });
       context += '\n';
     });
-  } else context = '(Tidak ada barang yang cocok)';
+  } else context = '(Tidak ada barang cocok)';
   
   const nama = getNama(sender);
   const sapaan = nama ? nama : 'kakak';
-  
   let filterInfo = '';
   if (tokoAktif) {
     const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
-    if (tokoObj) {
-      filterInfo = '\n⚠️ KONTEKS: User di MODE CARI di *' + tokoObj.nama + '*. JAWAB HANYA UNTUK TOKO INI!\n';
-    }
+    if (tokoObj) filterInfo = '\n⚠️ KONTEKS: User di MODE CARI di *' + tokoObj.nama + '*. JAWAB HANYA UNTUK TOKO INI!\n';
   } else if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
-    filterInfo = '\nUSER MENANYAKAN TOKO SPESIFIK: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + 
-                 '\nJAWAB HANYA UNTUK TOKO YANG DIMINTA!\n';
+    filterInfo = '\nUSER MENANYAKAN TOKO: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + '. JAWAB HANYA TOKO ITU!\n';
   }
   
-  const prompt = 'Kamu asisten AI toko perabot "Bot Perabot". Ramah, helpful, bahasa Indonesia santai.\n\n' +
-    '5 toko: Nasional Kitchen (NK), Perabot Mama TDM (TDM), Perabot Mama Oesapa, Perabot Mamaku Kefamenanu (Kefa), Central Perabot (CP).\n' +
-    filterInfo + '\n' +
-    'DATA RELEVAN (' + relevantItems.length + ' item):\n' + context + '\n\n' +
-    'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
-    'ATURAN PENTING:\n' +
-    '1. Ramah, panggil "' + sapaan + '"\n' +
-    '2. Pakai emoji yang sesuai\n' +
-    '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
-    '4. Pakai *bold* untuk teks penting\n' +
-    '5. Max 1500 char\n' +
-    '6. Patuhi konteks toko!\n' +
-    '7. ⚠️ *WAJIB:* SELALU TAMPILKAN HARGA ECER & AMBIL walau stok KOSONG!\n' +
-    '   Format harus seperti ini:\n' +
-    '   📦 *NAMA BARANG*\n' +
-    '   💰 Harga Ecer: Rp X.XXX.XXX\n' +
-    '   💰 Harga Ambil: Rp X.XXX.XXX\n' +
-    '   📊 Stok: ⚠️ KOSONG (atau jumlahnya)\n' +
-    '8. JANGAN HANYA bilang "stok kosong" tanpa menampilkan harga!\n' +
-    '9. Setelah info harga & stok, baru tambahkan komentar/rekomendasi\n' +
-    '10. Kalau stok kosong, sarankan cek toko lain (kalau tidak ada filter toko)\n' +
-    '11. Akhiri dengan tawaran bantuan\n\n' +
-    'Jawab pertanyaan user dengan LENGKAP (harga ECER + AMBIL + STOK):';
+  const prompt = 'Kamu asisten AI toko perabot "Bot Perabot". Ramah, bahasa Indonesia santai.\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n' +
+    filterInfo + '\nDATA (' + relevantItems.length + ' item):\n' + context + '\n' +
+    'PERTANYAAN (' + sapaan + '): "' + pertanyaan + '"\n\n' +
+    'ATURAN:\n1. Panggil "' + sapaan + '"\n2. Emoji sesuai\n3. Harga: Rp 1.000.000\n4. *bold* penting\n5. Max 1500 char\n' +
+    '6. Patuhi konteks toko!\n7. ⚠️ SELALU tampilkan harga Ecer + Ambil walau stok KOSONG!\n8. Akhiri tawaran bantuan\nJawab:';
 
   const result = await chatAI(prompt);
-  if (result && result.jawaban) {
-    log.info('AI_CHAT', '✅ ' + result.provider);
-    return result.jawaban;
-  }
+  if (result && result.jawaban) return result.jawaban;
   return null;
 }
 
 function isPertanyaanBarang(low) {
-  const KATA_TANYA = [
-    'stok','stock','harga','price','berapa','ada gak','ada ga','ada kah','apakah ada','masih ada',
-    'rekomendasi','rekomen','sarankan','saran','kosong','habis','tersedia','tersisa',
-    'cek','check','lihat','tampilkan','total','jumlah','berapa banyak',
-    'cari','mencari','mau','butuh','perlu','info','detail','data',
-  ];
-  const KATA_BARANG_UMUM = [
-    'panci','dandang','wajan','penggorengan','rice cooker','kompor','konpor',
-    'gelas','piring','mangkok','sendok','garpu','pisau',
-    'eagle','maxim','sunkist','golden','paramount','hock','sunlife','miyako',
-    'aluminium','alm','stainless','plastik','kaca','keramik',
-    'kursi','meja','lemari','rak','sumbu','minyak','gas',
-    'tl','serbaguna','susu','jar','drink','keranjang','periuk',
-    'magic','com','mcm','mejicom',
-  ];
+  const KATA_TANYA = ['stok','stock','harga','price','berapa','ada gak','ada ga','ada kah','apakah ada','masih ada','rekomendasi','rekomen','sarankan','saran','kosong','habis','tersedia','cek','check','lihat','tampilkan','total','jumlah','cari','mencari','mau','butuh','info','detail','data'];
+  const KATA_BARANG = ['panci','dandang','wajan','penggorengan','rice cooker','kompor','konpor','gelas','piring','mangkok','sendok','garpu','pisau','eagle','maxim','sunkist','golden','paramount','hock','sunlife','miyako','aluminium','alm','stainless','plastik','kaca','keramik','kursi','meja','lemari','rak','sumbu','minyak','gas','tl','serbaguna','susu','jar','drink','keranjang','periuk','magic','com','mcm'];
   const KATA_TOKO = ['nk','tdm','oesapa','kefa','cp','nasional','central','mama','mamaku','kefamenanu'];
-  const adaKataTanya = KATA_TANYA.some(function(k) { return low.indexOf(k) >= 0; });
-  const adaKataBarang = KATA_BARANG_UMUM.some(function(k) { return low.indexOf(k) >= 0; });
-  const adaKataToko = KATA_TOKO.some(function(k) { return low.indexOf(k) >= 0; });
-  const adaKodeBarang = /nn\d{4,5}/i.test(low);
+  const adaTanya = KATA_TANYA.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaBarang = KATA_BARANG.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaToko = KATA_TOKO.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaKode = /nn\d{4,5}/i.test(low);
   const jumlahKata = low.split(/\s+/).length;
-  return adaKodeBarang || (adaKataTanya && adaKataBarang) || (adaKataTanya && adaKataToko) ||
-         (adaKataBarang && adaKataToko) || (jumlahKata >= 4 && adaKataBarang);
+  return adaKode || (adaTanya && adaBarang) || (adaTanya && adaToko) || (adaBarang && adaToko) || (jumlahKata >= 4 && adaBarang);
 }
 
 function isPertanyaanUmum(low) {
-  const TENTANG_BOT = [
-    'apa kabar','gimana kabar','bot apa kabar','bisa apa','bisa apa saja','kamu bisa apa','apa fungsi',
-    'siapa kamu','kamu siapa','nama kamu','bagaimana cara','cara pakai','tutorial','panduan',
-    'tolong','bantu','help','bantuan','jelaskan','terangkan','beritahu','apakah kamu','apa kamu',
-  ];
-  const RANDOM_CHAT = ['cerita','lucu','joke','humor','lagi apa','sedang apa','ngapain','bingung','pusing'];
-  const KATA_TANYA_UMUM = ['apa','siapa','dimana','kapan','bagaimana','kenapa','mengapa'];
-  const adaTentangBot = TENTANG_BOT.some(function(k) { return low.indexOf(k) >= 0; });
-  const adaRandom = RANDOM_CHAT.some(function(k) { return low.indexOf(k) >= 0; });
-  const adaTanya = KATA_TANYA_UMUM.some(function(k) { return low.indexOf(k) >= 0; });
-  const jumlahKata = low.split(/\s+/).length;
-  return adaTentangBot || adaRandom || (adaTanya && jumlahKata >= 3);
+  const TENTANG_BOT = ['apa kabar','gimana kabar','bisa apa','bisa apa saja','kamu bisa apa','siapa kamu','kamu siapa','cara pakai','tolong','bantu','help','bantuan','jelaskan'];
+  const RANDOM = ['cerita','lucu','joke','lagi apa','sedang apa','ngapain','bingung','pusing'];
+  const TANYA = ['apa','siapa','dimana','kapan','bagaimana','kenapa','mengapa'];
+  return TENTANG_BOT.some(function(k) { return low.indexOf(k) >= 0; }) || 
+         RANDOM.some(function(k) { return low.indexOf(k) >= 0; }) || 
+         (TANYA.some(function(k) { return low.indexOf(k) >= 0; }) && low.split(/\s+/).length >= 3);
 }
 
 async function aiChatUmum(pertanyaan, sender) {
   const nama = getNama(sender);
   const sapaan = nama ? nama : 'kakak';
-  const prompt = 'Kamu "Bot Perabot" - asisten WhatsApp untuk Toko Perabot 5 cabang.\n\n' +
-    'Identitas: Bot Perabot, asisten 5 toko (Nasional Kitchen, Perabot Mama TDM, Perabot Mama Oesapa, Perabot Mamaku Kefamenanu, Central Perabot), database 9.982 barang.\n\n' +
-    'Fitur: Cari harga/stok, banding harga, rekomendasi, input laporan penjualan (Wizard), laporan harga & marketplace, ngobrol santai.\n\n' +
-    'Perintah: *menu* (menu utama), *1* (Laporan Penjualan), *4* (Cari Harga), atau tanya langsung "stok dandang eagle di NK?".\n\n' +
-    'PERTANYAAN USER (' + sapaan + '): "' + pertanyaan + '"\n\n' +
-    'ATURAN: Ramah, emoji sesuai, *bold*, max 1000 char, akhiri tawaran bantuan.\n\nJawab natural:';
+  const prompt = 'Kamu "Bot Perabot" asisten WhatsApp 5 toko perabot. Database 9.982 barang.\nFitur: Cari harga/stok, banding harga, rekomendasi, laporan penjualan (Wizard + Scan Foto), ngobrol.\nPerintah: *menu*, *1*-*4*, *9* (admin)\n\nPERTANYAAN (' + sapaan + '): "' + pertanyaan + '"\n\nJawab ramah, emoji, *bold*, max 1000 char, akhiri tawaran bantuan:';
   const result = await chatAI(prompt);
   if (result && result.jawaban) return result.jawaban;
   return null;
 }
+
+function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
+  const fmt = ' Format WhatsApp dengan emoji. Format rupiah Rp X.XXX.XXX.';
+  if (menuType === 1) {
+    if (tokoKode === 'cp') return 'Baca data penjualan toko Central Perabot Alak tanggal ' + tanggal + '. Format: 4 kassa (Kassa 1 Yuni-Salsa, Kassa 2 Nanda-Umi-Marselina, Kassa 3 Febri-Jien-Tika, Kassa 4 Delfi-Tirsa), total keseluruhan, metode bayar, jenis penjualan, kasir promo, parkir.' + fmt;
+    if (tokoKode === 'nk') return 'Baca data penjualan toko Nasional Kitchen tanggal ' + tanggal + '. Format: 2 kassa, total, metode bayar, jenis penjualan. Rupiah: Rp. X.XXX.XXX.' + fmt;
+    if (tokoKode === 'tdm' || tokoKode === 'oesapa' || tokoKode === 'kefa') {
+      const tNama = tokoKode === 'tdm' ? 'Perabot Mama TDM' : tokoKode === 'oesapa' ? 'Perabot Mama Oesapa' : 'Perabot Mamaku Kefamenanu';
+      return 'Baca data penjualan toko ' + tNama + ' tanggal ' + tanggal + '. Format: 2 kassa, total, metode bayar TANPA Ecer/Grosir. Rupiah: Rp. X.XXX.XXX.' + fmt;
+    }
+  }
+  if (menuType === 2) return 'Baca data harga barang toko "' + namaToko + '" tanggal ' + tanggal + '. Buat laporan: barang baru, naik harga, turun harga.' + fmt;
+  if (menuType === 3) return 'Baca data marketplace tanggal ' + tanggal + '. Buat laporan: per toko, per channel, metode bayar.' + fmt;
+  return 'Buat laporan rapi.' + fmt;
+}
+
 // ════════════════════════════════════════════════════════════════
-//   11. SAPAAN PINTAR & MOTIVASI
+//   12. SAPAAN PINTAR
 // ════════════════════════════════════════════════════════════════
 
 const SAPAAN_MAP = {
-  'halo':     { kategori: 'kasual', balasan: ['Halo', 'Haloo', 'Hai juga', 'Haaai', 'Halooo'] },
-  'hai':      { kategori: 'kasual', balasan: ['Hai', 'Haiii', 'Halo juga', 'Hai hai', 'Hai!'] },
-  'hi':       { kategori: 'kasual', balasan: ['Hi', 'Hi there', 'Hiii', 'Hi juga', 'Haii'] },
-  'hello':    { kategori: 'kasual', balasan: ['Hello', 'Hello juga', 'Helloo', 'Hi there'] },
-  'hallo':    { kategori: 'kasual', balasan: ['Hallo', 'Hallooo', 'Halo juga', 'Hai!'] },
-  'helo':     { kategori: 'kasual', balasan: ['Helo', 'Helooo', 'Halo juga', 'Hai!'] },
-  'hey':      { kategori: 'kasual', balasan: ['Hey', 'Hey juga', 'Heyyy', 'Hai!'] },
-  'hei':      { kategori: 'kasual', balasan: ['Hei', 'Hei juga', 'Heii', 'Halo!'] },
-  'yo':       { kategori: 'kasual', balasan: ['Yo', 'Yo bro', 'Yoyoyo', 'Yo juga'] },
-  'p':        { kategori: 'kasual', balasan: ['p juga', 'Halo', 'Hai', 'Iya?'] },
-  'ping':     { kategori: 'kasual', balasan: ['Pong! 🏓', 'Pong 🏓', 'Pong juga'] },
-  'pagi':     { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi', 'Pagi juga', 'Pagiii', 'Pagi yang cerah'] },
-  'siang':    { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang', 'Siang juga', 'Siaaang'] },
-  'sore':     { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore', 'Sore juga', 'Soreee'] },
-  'malam':    { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam', 'Malam juga', 'Malaaam'] },
-  'selamat pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Selamat pagi juga', 'Pagi yang indah', 'Selamat pagi'] },
-  'selamat siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Selamat siang juga', 'Siang yang cerah', 'Selamat siang'] },
-  'selamat sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Selamat sore juga', 'Sore yang menyenangkan', 'Selamat sore'] },
-  'selamat malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Selamat malam juga', 'Malam yang tenang', 'Selamat malam'] },
-  'met pagi':  { kategori: 'waktu', waktu: 'Pagi',  balasan: ['Met pagi juga', 'Selamat pagi', 'Pagi!'] },
-  'met siang': { kategori: 'waktu', waktu: 'Siang', balasan: ['Met siang juga', 'Selamat siang', 'Siang!'] },
-  'met sore':  { kategori: 'waktu', waktu: 'Sore',  balasan: ['Met sore juga', 'Selamat sore', 'Sore!'] },
-  'met malam': { kategori: 'waktu', waktu: 'Malam', balasan: ['Met malam juga', 'Selamat malam', 'Malam!'] },
-  'assalamualaikum':       { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam', 'Waalaikumsalam wr. wb.'] },
-  'assalamu':              { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam'] },
-  'assalamualaikum wr wb': { kategori: 'islami', balasan: ['Waalaikumsalam warahmatullahi wabarakatuh', 'Waalaikumsalam wr. wb.'] },
-  'salam':                 { kategori: 'islami', balasan: ['Salam juga', 'Salam sejahtera', 'Waalaikumsalam'] },
-  'good morning':   { kategori: 'english', waktu: 'Pagi',  balasan: ['Good morning', 'Morning!', 'Good morning to you'] },
-  'good afternoon': { kategori: 'english', waktu: 'Siang', balasan: ['Good afternoon', 'Afternoon!', 'Good afternoon to you'] },
-  'good evening':   { kategori: 'english', waktu: 'Sore',  balasan: ['Good evening', 'Evening!', 'Good evening to you'] },
-  'good night':     { kategori: 'english', waktu: 'Malam', balasan: ['Good night', 'Have a nice dream', 'Sleep well'] },
-  'permisi':     { kategori: 'sopan', balasan: ['Iya, silakan', 'Iya, ada yang bisa dibantu?', 'Ya, silakan'] },
-  'maaf':        { kategori: 'sopan', balasan: ['Iya, tidak apa-apa', 'Iya, ada yang bisa dibantu?', 'Iya, santai saja'] },
-  'maaf ganggu': { kategori: 'sopan', balasan: ['Tidak mengganggu kok', 'Santai saja', 'Tidak apa-apa, silakan'] },
+  'halo':{ kategori:'kasual', balasan:['Halo','Haloo','Hai juga','Halooo'] },
+  'hai':{ kategori:'kasual', balasan:['Hai','Haiii','Halo juga','Hai!'] },
+  'hi':{ kategori:'kasual', balasan:['Hi','Hi there','Hiii'] },
+  'hello':{ kategori:'kasual', balasan:['Hello','Hello juga','Helloo'] },
+  'hallo':{ kategori:'kasual', balasan:['Hallo','Hallooo','Halo juga'] },
+  'helo':{ kategori:'kasual', balasan:['Helo','Helooo','Hai!'] },
+  'hey':{ kategori:'kasual', balasan:['Hey','Hey juga','Heyyy'] },
+  'hei':{ kategori:'kasual', balasan:['Hei','Hei juga','Halo!'] },
+  'yo':{ kategori:'kasual', balasan:['Yo','Yo bro','Yoyoyo'] },
+  'p':{ kategori:'kasual', balasan:['p juga','Halo','Hai'] },
+  'pagi':{ kategori:'waktu', waktu:'Pagi', balasan:['Selamat pagi','Pagi juga','Pagiii'] },
+  'siang':{ kategori:'waktu', waktu:'Siang', balasan:['Selamat siang','Siang juga'] },
+  'sore':{ kategori:'waktu', waktu:'Sore', balasan:['Selamat sore','Sore juga'] },
+  'malam':{ kategori:'waktu', waktu:'Malam', balasan:['Selamat malam','Malam juga'] },
+  'selamat pagi':{ kategori:'waktu', waktu:'Pagi', balasan:['Selamat pagi juga','Pagi yang indah'] },
+  'selamat siang':{ kategori:'waktu', waktu:'Siang', balasan:['Selamat siang juga'] },
+  'selamat sore':{ kategori:'waktu', waktu:'Sore', balasan:['Selamat sore juga'] },
+  'selamat malam':{ kategori:'waktu', waktu:'Malam', balasan:['Selamat malam juga'] },
+  'assalamualaikum':{ kategori:'islami', balasan:['Waalaikumsalam warahmatullahi wabarakatuh','Waalaikumsalam'] },
+  'assalamu':{ kategori:'islami', balasan:['Waalaikumsalam warahmatullahi wabarakatuh'] },
+  'salam':{ kategori:'islami', balasan:['Salam juga','Waalaikumsalam'] },
+  'permisi':{ kategori:'sopan', balasan:['Iya, silakan','Ada yang bisa dibantu?'] },
+  'maaf':{ kategori:'sopan', balasan:['Iya, tidak apa-apa','Santai saja'] },
+  'maaf ganggu':{ kategori:'sopan', balasan:['Tidak mengganggu kok','Santai saja'] },
+  'good morning':{ kategori:'english', waktu:'Pagi', balasan:['Good morning','Morning!'] },
+  'good afternoon':{ kategori:'english', waktu:'Siang', balasan:['Good afternoon'] },
+  'good evening':{ kategori:'english', waktu:'Sore', balasan:['Good evening'] },
+  'good night':{ kategori:'english', waktu:'Malam', balasan:['Good night','Sleep well'] },
 };
 
 const KATA_SAPAAN_LIST = Object.keys(SAPAAN_MAP);
@@ -1063,37 +1008,24 @@ const KALIMAT_MOTIVASI = [
   '🌈 _Tetap semangat dan jangan menyerah!_ 🔥',
   '⭐ _Senyum dulu, rezeki menyusul!_ 😊',
   '🎯 _Fokus pada tujuan, abaikan keraguan!_ 💯',
-  '🌸 _Hari ini akan jadi hari yang luar biasa!_ ✨',
   '🚀 _Sukses dimulai dari langkah kecil hari ini!_ 👣',
   '💪 _Kamu lebih kuat dari yang kamu kira!_ 💯',
   '🌻 _Jangan lupa bahagia hari ini ya!_ 😊',
   '🔥 _Semangat terus, kamu hebat!_ 👏',
-  '✨ _Setiap detik adalah anugerah, manfaatkan dengan baik!_ 🙏',
-  '🎁 _Hari ini adalah hadiah, makanya disebut present!_ 🎀',
   '🌟 _Percayalah pada diri sendiri, kamu bisa!_ 💪',
   '☀️ _Tetap positif, hal baik akan datang!_ 🌈',
   '💝 _Berkah selalu menyertai orang yang bersyukur_ 🙏',
   '🌺 _Mulailah hari dengan senyuman terbaikmu!_ 😊',
-  '⚡ _Energi positif menarik hal-hal positif!_ ✨',
-  '🎊 _Hari yang produktif menanti, ayo semangat!_ 🚀',
   '💫 _Mimpi besar dimulai dari hari ini!_ 🌟',
-  '🌷 _Hidup itu indah, nikmati setiap momennya!_ 💖',
-  '🦋 _Jadilah versi terbaik dari dirimu hari ini!_ ⭐',
-  '🌊 _Mengalir seperti air, kuat seperti karang!_ 💪',
-  '🌞 _Cerahkan hari orang lain dengan kebaikanmu!_ 😊',
-  '🎵 _Hidup ini lagu, mainkan dengan indah!_ 🎶',
 ];
 
 const TANYA_KABAR = [
   'Bagaimana kabarnya hari ini? 😊',
   'Apa kabar? Semoga sehat selalu ya 💪',
   'Gimana kabarnya? Semoga baik-baik saja 🌸',
-  'Apa kabar hari ini? Semoga selalu dalam keadaan baik 🙏',
   'Bagaimana kabar? Semoga harimu menyenangkan 😊',
   'Kabar baik kah hari ini? 🌟',
-  'Lagi sibuk apa nih hari ini? 💼',
   'Bagaimana hari ini? Lancar semua? ✨',
-  'Apa kabar? Semoga selalu diberi kesehatan 🙏',
   'Gimana harinya? Semoga produktif 🚀',
 ];
 
@@ -1110,33 +1042,31 @@ function isSapaan(low) {
   return null;
 }
 
-const KATA_TERIMAKASIH = ['terima kasih','terimakasih','makasih','thanks','thank you','thx','tq','ty','tengkyu','mksh','trims','trimakasih'];
+const KATA_TERIMAKASIH = ['terima kasih','terimakasih','makasih','thanks','thank you','thx','tq','ty','tengkyu','mksh','trims'];
 function isTerimakasih(low) { return KATA_TERIMAKASIH.some(function(k) { return cocokKata(low, k); }); }
 
 function balasSapaanPintar(sender, kataSapaan) {
-  const nama  = getNama(sender);
+  const nama = getNama(sender);
   const waktu = getWaktu();
   const dataSapa = SAPAAN_MAP[kataSapaan];
   if (!dataSapa) return (nama ? 'Halo, *' + nama + '*! 😊' : 'Halo! 😊');
-  const opsiBalasan = dataSapa.balasan;
-  const pilihan = opsiBalasan[Math.floor(Math.random() * opsiBalasan.length)];
+  const pilihan = dataSapa.balasan[Math.floor(Math.random() * dataSapa.balasan.length)];
   let respon = '';
   if (dataSapa.kategori === 'waktu') {
     if (dataSapa.waktu === waktu) respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
     else respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊\n_(Sekarang udah ' + waktu.toLowerCase() + ' loh)_';
   } else if (dataSapa.kategori === 'islami') respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 🤲';
-  else if (dataSapa.kategori === 'english') respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
   else if (dataSapa.kategori === 'sopan')   respon = pilihan + (nama ? ', *' + nama + '*' : '') + ' 😊';
   else                                       respon = pilihan + (nama ? ', *' + nama + '*' : '') + '! 😊';
   return respon;
 }
 
 function sapaanPertama(sender) {
-  const nama   = getNama(sender);
-  const waktu  = getWaktu();
-  const motiv  = KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
-  const kabar  = TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
-  const sambutan = ['Selamat ' + waktu, 'Halo, selamat ' + waktu, 'Hai, selamat ' + waktu, 'Halo', 'Hai'];
+  const nama = getNama(sender);
+  const waktu = getWaktu();
+  const motiv = KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
+  const kabar = TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
+  const sambutan = ['Selamat ' + waktu, 'Halo, selamat ' + waktu, 'Hai'];
   const sapa = sambutan[Math.floor(Math.random() * sambutan.length)];
   return sapa + (nama ? ', *' + nama + '*' : '') + '! 👋\n\n' + motiv + '\n\n' + kabar;
 }
@@ -1153,11 +1083,7 @@ function sapaanBerikutnya(sender, kataSapaan) {
 function balasTerimakasih(sender) {
   const nama = getNama(sender);
   const n = nama ? ', *' + nama + '*' : '';
-  const opsi = [
-    'Sama-sama' + n + '! 😊', 'Dengan senang hati' + n + '! 😊', 'Tentu' + n + '! 😊',
-    'Iya, sama-sama' + n + '! 🙏', 'Senang bisa membantu' + n + '! ✨',
-    'You\'re welcome' + n + '! 😊', 'Yuk, kalau ada yang lain ketik *menu* ya' + n + '! 💪',
-  ];
+  const opsi = ['Sama-sama' + n + '! 😊', 'Dengan senang hati' + n + '! 😊', 'Tentu' + n + '! 😊', 'Senang bisa membantu' + n + '! ✨'];
   return opsi[Math.floor(Math.random() * opsi.length)];
 }
 
@@ -1167,7 +1093,88 @@ function isAdminCommand(low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. MENU FRIENDLY
+//   13. ★★★ SCAN FOTO HELPER ★★★
+// ════════════════════════════════════════════════════════════════
+
+function msgMintaFoto(tokoKode, stepIdx, namaToko, dataWizard) {
+  const steps = SCAN_STEPS[tokoKode];
+  if (!steps || stepIdx >= steps.length) return null;
+  const stepInfo = steps[stepIdx];
+  const totalSteps = steps.length;
+  const no = stepIdx + 1;
+  
+  let m = '📸 *SCAN FOTO LAPORAN*\n';
+  m += '🏦 ' + namaToko + '\n';
+  m += '━━━━━━━━━━━━━━━━━━\n';
+  m += '📊 *Foto ' + no + ' dari ' + totalSteps + '*\n';
+  const progress = Math.floor((no / totalSteps) * 10);
+  m += '[';
+  for (let i = 0; i < 10; i++) m += i < progress ? '█' : '░';
+  m += '] ' + Math.round((no / totalSteps) * 100) + '%\n';
+  m += '━━━━━━━━━━━━━━━━━━\n\n';
+  
+  if (stepInfo.scanField === 'manual') {
+    m += '🅿️ *' + stepInfo.label + '*\n\n';
+    m += '⌨️ Ketik nominal ' + stepInfo.label + ':\n';
+    m += '   (ketik angka atau *-* jika kosong)\n\n';
+  } else {
+    m += '📸 *Kirim foto untuk:*\n';
+    m += '🏷️ *' + stepInfo.label + '*\n\n';
+    
+    if (stepInfo.scanField === 'total_transaksi') {
+      m += '💡 Saya akan scan angka *Total Transaksi*\n   dari tabel iPos yang kamu kirim\n\n';
+    } else if (stepInfo.scanField === 'multi' || stepInfo.scanField === 'multi_promo') {
+      m += '💡 Saya akan scan beberapa data sekaligus:\n';
+      stepInfo.fields.forEach(function(f) {
+        m += '   • ' + f + '\n';
+      });
+      m += '\n';
+    }
+    
+    m += '📸 *Kirim foto sekarang*\n';
+    m += '⌨️ Atau ketik angka manual\n';
+  }
+  
+  // Tampilkan progress data
+  const filled = Object.keys(dataWizard).filter(function(k) { return !k.startsWith('_') && dataWizard[k] !== undefined; });
+  if (filled.length > 0) {
+    m += '\n✅ *Data terisi: ' + filled.length + ' field*\n';
+  }
+  
+  m += '\n━━━━━━━━━━━━━━━━━━\n';
+  m += '🔙 *batal* | ⏭️ *skip* | 👁️ *review* | 💬 *selesai*';
+  return m;
+}
+
+function wizardScanReview(tokoKode, dataWizard, namaToko) {
+  const steps = SCAN_STEPS[tokoKode];
+  let m = '👁️ *REVIEW DATA SCAN*\n🏦 ' + namaToko + '\n' + GARIS_TEBAL + '\n\n';
+  
+  // Tampilkan semua field berdasarkan FIELD_LAPORAN
+  const fields = FIELD_LAPORAN[tokoKode];
+  fields.forEach(function(f) {
+    const v = dataWizard[f.key];
+    let label = f.label;
+    if (tokoKode === 'cp' && KASIR_CP_DEFAULT[f.key]) label = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
+    if (v === undefined) m += '⬜ ' + label + ': _(belum diisi)_\n';
+    else if (v === 0) m += '✅ ' + label + ': Rp. -\n';
+    else m += '✅ ' + label + ': Rp. ' + parseInt(v).toLocaleString('id-ID') + '\n';
+  });
+  
+  // Khusus CP: tampilkan total parkir
+  if (tokoKode === 'cp' && (dataWizard.parkirkomputer !== undefined || dataWizard.parkirluar !== undefined)) {
+    const totalParkir = (dataWizard.parkirkomputer || 0) + (dataWizard.parkirluar || 0);
+    m += '\n🅿️ Total Parkir: Rp. ' + totalParkir.toLocaleString('id-ID') + ' (otomatis)\n';
+  }
+  
+  m += '\n' + GARIS_TEBAL + '\n';
+  m += '💬 *lanjut* — lanjut scan\n';
+  m += '💬 *selesai* — generate laporan\n';
+  m += '🔙 *batal* — batalkan';
+  return m;
+}
+// ════════════════════════════════════════════════════════════════
+//   14. MENU FRIENDLY
 // ════════════════════════════════════════════════════════════════
 
 function getMenuUtama(nomor) {
@@ -1182,176 +1189,70 @@ function getMenuUtama(nomor) {
   if (isMember(nomor)) m += '│ ' + emojiNum(4) + ' 🔍 Cari Harga Barang\n';
   if (isAdmin(nomor))  m += '│ ' + emojiNum(9) + ' 👑 Menu Admin\n';
   m += '└─────────────────────\n\n';
-  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n   atau ketik nama menunya\n\n';
+  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n\n';
   if (isMember(nomor)) {
-    m += '🤖 *Tanya langsung (AI):*\n';
-    m += '   _"Stok dandang eagle 20 di NK?"_\n';
-    m += '   _"Cek harga panci di TDM"_\n\n';
-    m += '📊 *Banding Harga:*\n';
-    m += '   _"Bandingkan harga NN00001"_\n';
-    m += '   _"Panci eagle termurah dimana?"_\n';
-    m += '   _"Selisih harga dandang"_';
+    m += '🤖 *Tanya AI:*\n   _"Stok dandang eagle 20 di NK?"_\n\n';
+    m += '📊 *Banding Harga:*\n   _"Bandingkan harga NN00001"_';
   }
   return m;
 }
 
 function getMenuPilihToko(menuType) {
   const ic = menuType === 1 ? '📊' : menuType === 2 ? '🏷️' : menuType === 'cari' ? '🔍' : '🛒';
-  const jd = menuType === 1 ? 'LAPORAN PENJUALAN'
-           : menuType === 2 ? 'LAPORAN HARGA BARANG'
-           : menuType === 'cari' ? 'CARI HARGA BARANG'
-           : 'LAPORAN MARKETPLACE';
+  const jd = menuType === 1 ? 'LAPORAN PENJUALAN' : menuType === 2 ? 'LAPORAN HARGA BARANG' : menuType === 'cari' ? 'CARI HARGA BARANG' : 'LAPORAN MARKETPLACE';
   let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ' + ic + ' *' + jd + '*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
   m += '🏦 *Pilih Toko:*\n\n┌─────────────────────\n';
   TOKO_LIST.forEach(function(t, i) { m += '│ ' + emojiNum(i + 1) + ' ' + t.nama + '\n'; });
-  m += '└─────────────────────\n\n💬 Ketik nomor (1-5) atau nama toko\n   contoh: *1* atau *nk*\n\n🔙 Ketik *batal* untuk kembali';
+  m += '└─────────────────────\n\n💬 Ketik nomor (1-5)\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuPilihHari(namaToko) {
   let m = '╭━━━━━━━━━━━━━━━━━╮\n│  🏦 *' + namaToko + '*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
   m += '📅 *Laporan untuk hari:*\n\n┌─────────────────────\n';
-  m += '│ ' + emojiNum(1) + ' 📅 *HARI INI*\n│    _(' + getTanggal(false) + ')_\n│\n';
-  m += '│ ' + emojiNum(2) + ' 📅 *KEMARIN*\n│    _(' + getTanggal(true) + ')_\n';
-  m += '└─────────────────────\n\n💬 Ketik *1* untuk hari ini\n   atau *2* untuk kemarin\n\n🔙 Ketik *batal* untuk kembali';
+  m += '│ ' + emojiNum(1) + ' 📅 *HARI INI* _(' + getTanggal(false) + ')_\n│\n';
+  m += '│ ' + emojiNum(2) + ' 📅 *KEMARIN* _(' + getTanggal(true) + ')_\n';
+  m += '└─────────────────────\n\n💬 Ketik *1* atau *2*\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuSiapInputMarket(namaToko, kemarin) {
-  const t = getTanggal(kemarin);
-  const k = kemarin ? ' _(kemarin)_' : '';
+  const t = getTanggal(kemarin); const k = kemarin ? ' _(kemarin)_' : '';
   const contoh = 'oesapa 0\ntdm 0\ncentral 21061000\nwa 21061000\nshopee 0\ntiktok 0\ntokopedia 0\ntunai 304000\ndebit 20757000';
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
-  m += '📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n';
-  m += '🔙 Ketik *batal* untuk membatalkan';
-  return m;
+  return '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n🔙 Ketik *batal* untuk membatalkan';
 }
 
 function getMenuSiapInputHarga(namaToko, kemarin) {
-  const t = getTanggal(kemarin);
-  const k = kemarin ? ' _(kemarin)_' : '';
+  const t = getTanggal(kemarin); const k = kemarin ? ' _(kemarin)_' : '';
   const contoh = '---baru---\nNama barang baru\n---naik---\nNama barang naik\n---turun---\nNama barang turun';
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n';
-  m += '📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n';
-  m += '🔙 Ketik *batal* untuk membatalkan';
-  return m;
+  return '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *SIAP INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n🏦 ' + namaToko + '\n📅 ' + t + k + '\n\n📸 *Kirim FOTO* atau *ketik manual:*\n\n```' + contoh + '```\n\n🔙 Ketik *batal* untuk membatalkan';
 }
 
 function getMenuAdmin() {
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  👑 *MENU ADMIN*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🛠️ *Pilih aksi:*\n\n┌─────────────────────\n';
-  m += '│ ' + emojiNum(1) + ' 👥 List Member\n';
-  m += '│ ' + emojiNum(2) + ' 📒 List Kontak\n';
-  m += '│ ' + emojiNum(3) + ' ➕ Tambah Member\n';
-  m += '│ ' + emojiNum(4) + ' ➖ Hapus Member\n';
-  m += '│ ' + emojiNum(5) + ' ✏️ Set Nama Kontak\n';
-  m += '│ ' + emojiNum(6) + ' 🗑️ Hapus Kontak\n';
-  m += '│ ' + emojiNum(7) + ' 🔄 Reload Excel\n';
-  m += '│ ' + emojiNum(8) + ' ℹ️ Info Sistem\n';
+  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  👑 *MENU ADMIN*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n🛠️ *Pilih aksi:*\n\n┌─────────────────────\n';
+  m += '│ ' + emojiNum(1) + ' 👥 List Member\n│ ' + emojiNum(2) + ' 📒 List Kontak\n';
+  m += '│ ' + emojiNum(3) + ' ➕ Tambah Member\n│ ' + emojiNum(4) + ' ➖ Hapus Member\n';
+  m += '│ ' + emojiNum(5) + ' ✏️ Set Nama Kontak\n│ ' + emojiNum(6) + ' 🗑️ Hapus Kontak\n';
+  m += '│ ' + emojiNum(7) + ' 🔄 Reload Excel\n│ ' + emojiNum(8) + ' ℹ️ Info Sistem\n';
   m += '└─────────────────────\n\n💬 Ketik nomor (1-8)\n\n🔙 Ketik *batal* untuk kembali';
   return m;
 }
 
 function getMenuSiapCari(namaToko) {
-  let m = '╭━━━━━━━━━━━━━━━━━╮\n│  🔍 *CARI BARANG*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
-  m += '🏦 ' + namaToko + '\n\n━━━━━━━━━━━━━━━━━━\n⌨️ *Ketik nama atau kode:*\n━━━━━━━━━━━━━━━━━━\n\n';
-  m += '💡 *Contoh:*\n   • _dandang eagle 20_\n   • _NN00001_\n   • _golden sunkist_\n\n';
-  m += '✨ Bot otomatis koreksi typo!\n\n🔙 Ketik *batal* untuk kembali';
-  return m;
+  return '╭━━━━━━━━━━━━━━━━━╮\n│  🔍 *CARI BARANG*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n🏦 ' + namaToko + '\n\n━━━━━━━━━━━━━━━━━━\n⌨️ *Ketik nama atau kode:*\n━━━━━━━━━━━━━━━━━━\n\n💡 *Contoh:*\n   • _dandang eagle 20_\n   • _NN00001_\n\n✨ Bot otomatis koreksi typo!\n\n🔙 Ketik *batal* untuk kembali';
 }
 
 function getMenuCariUlang(namaToko) {
-  let m = '━━━━━━━━━━━━━━━━━━\n🔍 *Cari lagi di ' + namaToko + '?*\n━━━━━━━━━━━━━━━━━━\n\n';
-  m += '⌨️ Ketik nama/kode barang lain\n\n┌─────────────────────\n';
-  m += '│ ' + emojiNum(9) + ' 🔄 Ganti toko\n│ *batal* 🔙 Menu utama\n└─────────────────────';
-  return m;
+  return '━━━━━━━━━━━━━━━━━━\n🔍 *Cari lagi di ' + namaToko + '?*\n━━━━━━━━━━━━━━━━━━\n\n⌨️ Ketik nama/kode barang lain\n\n┌─────────────────────\n│ ' + emojiNum(9) + ' 🔄 Ganti toko\n│ *batal* 🔙 Menu utama\n└─────────────────────';
 }
 
 // ════════════════════════════════════════════════════════════════
-//   13. WIZARD MODE
+//   15. WIZARD TEXT HELPERS
 // ════════════════════════════════════════════════════════════════
-
-function wizardGetNextField(tokoKode, dataWizard) {
-  const fields = FIELD_LAPORAN[tokoKode];
-  if (!fields) return null;
-  for (let i = 0; i < fields.length; i++) {
-    const f = fields[i];
-    if (dataWizard[f.key] === undefined) return { field: f, index: i, total: fields.length };
-  }
-  return null;
-}
-
-function wizardTanyaField(tokoKode, fieldInfo, namaToko, dataWizard) {
-  const f = fieldInfo.field;
-  const no = fieldInfo.index + 1;
-  const total = fieldInfo.total;
-  let m = '🤖 *INPUT LAPORAN*\n';
-  m += '🏦 ' + namaToko + '\n';
-  m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '📊 *Step ' + no + ' dari ' + total + '*\n';
-  const progress = Math.floor((no / total) * 10);
-  m += '[';
-  for (let i = 0; i < 10; i++) m += i < progress ? '█' : '░';
-  m += '] ' + Math.round((no / total) * 100) + '%\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
-  let labelLengkap = f.label;
-  if (tokoKode === 'cp' && KASIR_CP_DEFAULT[f.key]) {
-    labelLengkap = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
-  }
-  if (f.key === 'total' && f.auto) {
-    let totalCalc = 0;
-    Object.keys(dataWizard).forEach(function(k) {
-      if (k.startsWith('k') && k.length <= 2 && !k.startsWith('kr')) {
-        totalCalc += (parseInt(dataWizard[k]) || 0);
-      }
-    });
-    const formatTotal = totalCalc === 0 ? 'Rp. -' : 'Rp. ' + totalCalc.toLocaleString('id-ID');
-    m += f.emoji + ' *' + labelLengkap + '*\n\n';
-    m += '📋 Total dari kassa: *' + formatTotal + '*\n\n';
-    m += '💰 *Masukkan total penjualan keseluruhan:*\n\n';
-    m += '💡 Ketik angka atau tekan:\n';
-    m += '   • _angka_ jika total berbeda\n';
-    m += '   • *ok* untuk pakai total kassa otomatis\n\n';
-  } else {
-    m += f.emoji + ' *' + labelLengkap + '*\n\n';
-    m += '💰 *Berapa nominalnya?*\n\n';
-    m += '💡 Ketik angka saja:\n';
-    m += '   • _29812000_\n';
-    m += '   • _29.812.000_\n';
-    m += '   • _-_ atau *0* jika kosong\n\n';
-  }
-  m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '🔙 *batal* | ⏭️ *skip* | 👁️ *review*';
-  return m;
-}
-
-function wizardReview(tokoKode, dataWizard, namaToko) {
-  const fields = FIELD_LAPORAN[tokoKode];
-  let m = '👁️ *REVIEW DATA SEMENTARA*\n';
-  m += '🏦 ' + namaToko + '\n━━━━━━━━━━━━━━━━━━\n\n';
-  fields.forEach(function(f) {
-    const v = dataWizard[f.key];
-    let labelLengkap = f.label;
-    if (tokoKode === 'cp' && KASIR_CP_DEFAULT[f.key]) {
-      labelLengkap = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
-    }
-    if (v === undefined) m += '⬜ ' + labelLengkap + ': _(belum diisi)_\n';
-    else if (v === 0)    m += '✅ ' + labelLengkap + ': Rp. -\n';
-    else                  m += '✅ ' + labelLengkap + ': Rp. ' + parseInt(v).toLocaleString('id-ID') + '\n';
-  });
-  m += '\n━━━━━━━━━━━━━━━━━━\n';
-  m += '💬 *lanjut* — lanjut input\n';
-  m += '💬 *selesai* — generate laporan\n';
-  m += '🔙 *batal* — batalkan';
-  return m;
-}
 
 function wizardToText(dataWizard, tokoKode) {
   let text = '';
   Object.keys(dataWizard).forEach(function(key) {
-    if (key.startsWith('nama_')) return;
     if (key.startsWith('_')) return;
     if (key === 'total') return;
     const v = dataWizard[key];
@@ -1365,7 +1266,7 @@ function wizardToText(dataWizard, tokoKode) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   14. PARSER PINTAR
+//   16. PARSER PINTAR
 // ════════════════════════════════════════════════════════════════
 
 function parsePilihanMenu(low) {
@@ -1376,7 +1277,7 @@ function parsePilihanMenu(low) {
   if (low === '9' || low === 'admin') return 9;
   if (low.indexOf('penjualan') >= 0) return 1;
   if (low.indexOf('harga') >= 0 && low.indexOf('barang') >= 0) return 2;
-  if (low.indexOf('marketplace') >= 0 || low.indexOf('market') >= 0) return 3;
+  if (low.indexOf('marketplace') >= 0) return 3;
   if (low.indexOf('cari') >= 0) return 4;
   if (low.indexOf('admin') >= 0) return 9;
   return null;
@@ -1388,7 +1289,6 @@ function parsePilihanToko(low) {
   for (let i = 0; i < TOKO_LIST.length; i++) {
     const t = TOKO_LIST[i];
     if (low === t.kode) return t;
-    if (low === t.nama.toLowerCase()) return t;
     for (let j = 0; j < t.alias.length; j++) {
       if (low === t.alias[j] || low.indexOf(t.alias[j]) >= 0) return t;
     }
@@ -1397,19 +1297,19 @@ function parsePilihanToko(low) {
 }
 
 function parsePilihanHari(low) {
-  if (low === '1' || low.indexOf('hari ini') >= 0 || low === 'sekarang' || low === 'today') return false;
-  if (low === '2' || low.indexOf('kemarin') >= 0 || low === 'yesterday') return true;
+  if (low === '1' || low.indexOf('hari ini') >= 0) return false;
+  if (low === '2' || low.indexOf('kemarin') >= 0) return true;
   return null;
 }
 
 function parsePilihanAdmin(low) {
-  const map = { '1': 'listmember', '2': 'listkontak', '3': 'daftar', '4': 'hapus', '5': 'namakontak', '6': 'hapuskontak', '7': 'reload', '8': 'info' };
+  const map = { '1':'listmember','2':'listkontak','3':'daftar','4':'hapus','5':'namakontak','6':'hapuskontak','7':'reload','8':'info' };
   if (map[low]) return map[low];
-  if (low.indexOf('list member') >= 0 || low === 'listmember') return 'listmember';
-  if (low.indexOf('list kontak') >= 0 || low === 'listkontak') return 'listkontak';
+  if (low === 'listmember' || low.indexOf('list member') >= 0) return 'listmember';
+  if (low === 'listkontak' || low.indexOf('list kontak') >= 0) return 'listkontak';
   if (low.indexOf('tambah') >= 0 || low === 'daftar') return 'daftar';
-  if (low === 'hapus member' || low === 'hapus') return 'hapus';
-  if (low.indexOf('set nama') >= 0 || low === 'namakontak') return 'namakontak';
+  if (low === 'hapus') return 'hapus';
+  if (low === 'namakontak' || low.indexOf('set nama') >= 0) return 'namakontak';
   if (low.indexOf('hapus kontak') >= 0) return 'hapuskontak';
   if (low === 'reload') return 'reload';
   if (low === 'info') return 'info';
@@ -1417,61 +1317,49 @@ function parsePilihanAdmin(low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. FORMAT HASIL CARI
+//   17. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
   const namaToko = NAMA_TOKO[tokoKode] || '-';
-  const nama     = getNama(sender);
-  const suffix   = '\n\n' + (nama ? 'Semoga membantu, *' + nama + '*! 😊' : 'Semoga membantu! 😊');
-  const items          = searchResult.hasil     || [];
-  const saran          = searchResult.saran     || [];
-  const tipeHasil      = searchResult.tipeHasil || 'kosong';
+  const nama = getNama(sender);
+  const suffix = '\n\n' + (nama ? 'Semoga membantu, *' + nama + '*! 😊' : 'Semoga membantu! 😊');
+  const items = searchResult.hasil || [];
+  const saran = searchResult.saran || [];
+  const tipeHasil = searchResult.tipeHasil || 'kosong';
   const totalDitemukan = searchResult.totalDitemukan || items.length;
 
-  if (tipeHasil === 'kosong') {
-    return '❌ *Barang Tidak Ditemukan*\n' + GARIS_TEBAL +
-      '\n\n💡 *Tips:*\n• Gunakan kata kunci lebih singkat\n• Cari by kode (contoh: _NN00001_)\n• Periksa ejaan kata kunci';
-  }
+  if (tipeHasil === 'kosong') return '❌ *Barang Tidak Ditemukan*\n' + GARIS_TEBAL + '\n\n💡 *Tips:*\n• Kata kunci lebih singkat\n• Cari by kode (_NN00001_)';
   if (tipeHasil === 'saran' && items.length === 0 && saran.length > 0) {
-    let msg = '🤔 *Tidak Ditemukan Persis*\n' + GARIS_TEBAL + '\n🏦 *' + namaToko + '*\n\n💡 Mungkin yang kamu cari:\n\n';
+    let msg = '🤔 *Tidak Ditemukan Persis*\n' + GARIS_TEBAL + '\n🏦 *' + namaToko + '*\n\n💡 Mungkin:\n\n';
     saran.forEach(function(d, i) {
-      const h = d.harga[tokoKode];
-      msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 _' + d.kode + '_\n   💰 ' + fRp(h.ecer) + '\n';
+      msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 _' + d.kode + '_ | 💰 ' + fRp(d.harga[tokoKode].ecer) + '\n';
       if (i < saran.length - 1) msg += GARIS_TIPIS + '\n';
     });
-    msg += '\n💡 Ketik *kode* untuk detail. Contoh: _' + saran[0].kode + '_';
     return msg + suffix;
   }
   if (items.length === 1) {
     const d = items[0]; const h = d.harga[tokoKode];
-    let msg = '🏷️ *Detail Barang*\n🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n' +
-      '🔖 *Kode*   : ' + d.kode + '\n📦 *Nama*   : ' + d.nama + '\n' +
-      '🏷️ *Jenis*  : ' + (d.jenis || '-') + '\n🏗️ *Merek*  : ' + (d.merek || '-') + '\n' +
-      '📏 *Satuan* : ' + d.satuan + '\n' + GARIS_TEBAL + '\n' +
-      '💰 *Harga Ecer*  : ' + fRp(h.ecer) + '\n💰 *Harga Ambil* : ' + fRp(h.ambil) + '\n' +
-      '📊 *Stok*        : ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n' + GARIS_TEBAL;
+    let msg = '🏷️ *Detail Barang*\n🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
+    msg += '🔖 *Kode*: ' + d.kode + '\n📦 *Nama*: ' + d.nama + '\n';
+    msg += '🏷️ *Jenis*: ' + (d.jenis || '-') + '\n🏗️ *Merek*: ' + (d.merek || '-') + '\n📏 *Satuan*: ' + d.satuan + '\n' + GARIS_TEBAL + '\n';
+    msg += '💰 *Ecer*: ' + fRp(h.ecer) + '\n💰 *Ambil*: ' + fRp(h.ambil) + '\n📊 *Stok*: ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n' + GARIS_TEBAL;
     if (tipeHasil === 'fuzzy') msg += '\n\n💡 _Hasil koreksi otomatis_';
     return msg + suffix;
   }
-  let header = totalDitemukan > CONFIG.maxHasilCari
-    ? '🔍 *' + items.length + ' dari ' + totalDitemukan + ' Barang*\n'
-    : '🔍 *Ditemukan ' + items.length + ' Barang*\n';
+  let header = totalDitemukan > CONFIG.maxHasilCari ? '🔍 *' + items.length + ' dari ' + totalDitemukan + ' Barang*\n' : '🔍 *Ditemukan ' + items.length + ' Barang*\n';
   let msg = header + '🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
-  if (tipeHasil === 'fuzzy') msg += '💡 _Hasil koreksi otomatis_\n\n';
   items.forEach(function(d, i) {
     const h = d.harga[tokoKode];
-    msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | ' + d.satuan + '\n';
-    msg += '   💰 Ecer: ' + fRp(h.ecer) + ' | Ambil: ' + fRp(h.ambil) + '\n';
-    msg += '   📊 Stok: ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n';
+    msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | 💰 Ecer: ' + fRp(h.ecer) + ' | 📊 ' + (h.stok > 0 ? h.stok : '⚠️ Kosong') + '\n';
     if (i < items.length - 1) msg += GARIS_TIPIS + '\n';
   });
   msg += GARIS_TEBAL;
-  if (totalDitemukan > CONFIG.maxHasilCari) msg += '\n\n⚠️ Masih ada *' + (totalDitemukan - CONFIG.maxHasilCari) + '* barang lagi.';
+  if (totalDitemukan > CONFIG.maxHasilCari) msg += '\n\n⚠️ +' + (totalDitemukan - CONFIG.maxHasilCari) + ' barang lagi';
   return msg + suffix;
 }
 // ════════════════════════════════════════════════════════════════
-//   16. GENERATOR LAPORAN
+//   18. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
@@ -1480,25 +1368,22 @@ function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
   if (tokoKode === 'tdm') return genLapPenjualanStandar(text, kemarin, 'Perabot Mama TDM', 'noEcer');
   if (tokoKode === 'oesapa') return genLapPenjualanStandar(text, kemarin, 'Perabot Mama Oesapa', 'noEcer');
   if (tokoKode === 'kefa') return genLapPenjualanStandar(text, kemarin, 'Perabot Mamaku Kefamenanu', 'noEcer');
-  return GARIS_TEBAL + '\n📊 LAPORAN PENJUALAN\n🏦 ' + namaToko + '\n' + GARIS_TEBAL + '\n_Format tidak dikenali_';
+  return 'Format tidak dikenali';
 }
 
 function genLapPenjualanStandar(text, kemarin, namaTokoFull, mode) {
   const t = getTanggal(kemarin);
-  const d = { k1: 0, k2: 0, k3: 0, tunai: 0, debit: 0, kredit: 0, ecer: 0, grosir: 0 };
+  const d = { k1:0, k2:0, k3:0, tunai:0, debit:0, kredit:0, ecer:0, grosir:0 };
   text.trim().split('\n').forEach(function(line) {
-    const tr = line.trim();
-    if (!tr) return;
-    const parts = tr.split(/\s+/);
-    if (parts.length < 2) return;
+    const tr = line.trim(); if (!tr) return;
+    const parts = tr.split(/\s+/); if (parts.length < 2) return;
     const key = parts[0].toLowerCase();
     const rawValue = parts.slice(1).join(' ').trim();
     let value = 0;
     if (rawValue !== '-' && rawValue !== 'kosong' && rawValue !== 'null') {
-      const valueStr = rawValue.replace(/[^0-9]/g, '');
-      value = parseFloat(valueStr) || 0;
+      value = parseFloat(rawValue.replace(/[^0-9]/g, '')) || 0;
     }
-    if      (key === 'k1') d.k1 = value;
+    if (key === 'k1') d.k1 = value;
     else if (key === 'k2') d.k2 = value;
     else if (key === 'k3') d.k3 = value;
     else if (key === 'tunai') d.tunai = value;
@@ -1507,72 +1392,42 @@ function genLapPenjualanStandar(text, kemarin, namaTokoFull, mode) {
     else if (key === 'ecer') d.ecer = value;
     else if (key === 'grosir') d.grosir = value;
   });
-  function fr(n) {
-    const v = parseFloat(n) || 0;
-    if (v === 0) return 'Rp. -';
-    return 'Rp. ' + v.toLocaleString('id-ID');
-  }
+  function fr(n) { const v = parseFloat(n) || 0; return v === 0 ? 'Rp. -' : 'Rp. ' + v.toLocaleString('id-ID'); }
   const totalUtama = d.k1 + d.k2 + d.k3;
-  let msg = 'Laporan Penjualan\n';
-  msg += 'Toko ' + namaTokoFull + '\n';
-  msg += 'Periode ' + t + '\n\n';
-  msg += 'Kassa 1 ' + fr(d.k1) + '\n';
-  msg += 'Kassa 2 ' + fr(d.k2) + '\n';
+  let msg = 'Laporan Penjualan\nToko ' + namaTokoFull + '\nPeriode ' + t + '\n\n';
+  msg += 'Kassa 1 ' + fr(d.k1) + '\nKassa 2 ' + fr(d.k2) + '\n';
   if (d.k3 > 0) msg += 'Kassa 3 ' + fr(d.k3) + '\n';
-  msg += '\n';
-  msg += 'Total Penjualan Keseluruhan\n';
-  msg += fr(totalUtama) + '\n';
-  msg += '---------------------------------------------\n\n';
-  msg += 'Tunai  ' + fr(d.tunai) + '\n';
-  msg += 'Debit  ' + fr(d.debit) + '\n';
-  msg += 'Credit ' + fr(d.kredit) + '\n';
-  msg += '---------------------------------------------\n';
+  msg += '\nTotal Penjualan Keseluruhan\n' + fr(totalUtama) + '\n---------------------------------------------\n\n';
+  msg += 'Tunai  ' + fr(d.tunai) + '\nDebit  ' + fr(d.debit) + '\nCredit ' + fr(d.kredit) + '\n---------------------------------------------\n';
   if (mode === 'fullEcer' || d.ecer > 0 || d.grosir > 0) {
-    msg += 'Ecer : ' + fr(d.ecer) + '\n';
-    msg += 'Grosir : ' + fr(d.grosir) + '\n';
-    msg += '--------------------------------------------';
+    msg += 'Ecer : ' + fr(d.ecer) + '\nGrosir : ' + fr(d.grosir) + '\n--------------------------------------------';
   }
   return msg;
 }
 
 function genLapPenjualanCP(text, kemarin) {
   const t = getTanggal(kemarin);
-  const d = {
-    k1: 0, k2: 0, k3: 0, k4: 0,
-    nk1: '', nk2: '', nk3: '', nk4: '',
-    tunai: 0, debit: 0, kredit: 0,
-    ecer: 0, grosir: 0,
-    promo: 0, promoTunai: 0, promoDebit: 0, promoKredit: 0,
-    parkirKomputer: 0, parkirLuar: 0,
-  };
+  const d = { k1:0, k2:0, k3:0, k4:0, nk1:'', nk2:'', nk3:'', nk4:'', tunai:0, debit:0, kredit:0, ecer:0, grosir:0, promo:0, promoTunai:0, promoDebit:0, promoKredit:0, parkirKomputer:0, parkirLuar:0 };
   text.trim().split('\n').forEach(function(line) {
-    const tr = line.trim();
-    if (!tr) return;
-    const parts = tr.split(/\s+/);
-    if (parts.length < 2) return;
+    const tr = line.trim(); if (!tr) return;
+    const parts = tr.split(/\s+/); if (parts.length < 2) return;
     const key = parts[0].toLowerCase();
-    let valueStart = 1;
-    let kasirNama = '';
+    let valueStart = 1; let kasirNama = '';
     if (['k1','k2','k3','k4'].indexOf(key) >= 0 && parts.length >= 3) {
       const possibleNum = parts[1].replace(/[^0-9]/g, '');
       if (!possibleNum || possibleNum.length < 4) {
         for (let i = 1; i < parts.length; i++) {
           const num = parts[i].replace(/[^0-9]/g, '');
-          if (num && num.length >= 4) {
-            valueStart = i;
-            kasirNama = parts.slice(1, i).join(' ');
-            break;
-          }
+          if (num && num.length >= 4) { valueStart = i; kasirNama = parts.slice(1, i).join(' '); break; }
         }
       }
     }
     const rawValue = parts.slice(valueStart).join(' ').trim();
     let value = 0;
     if (rawValue !== '-' && rawValue !== 'kosong' && rawValue !== 'null') {
-      const valueStr = rawValue.replace(/[^0-9]/g, '');
-      value = parseFloat(valueStr) || 0;
+      value = parseFloat(rawValue.replace(/[^0-9]/g, '')) || 0;
     }
-    if      (key === 'k1') { d.k1 = value; if (kasirNama) d.nk1 = kasirNama; }
+    if (key === 'k1') { d.k1 = value; if (kasirNama) d.nk1 = kasirNama; }
     else if (key === 'k2') { d.k2 = value; if (kasirNama) d.nk2 = kasirNama; }
     else if (key === 'k3') { d.k3 = value; if (kasirNama) d.nk3 = kasirNama; }
     else if (key === 'k4') { d.k4 = value; if (kasirNama) d.nk4 = kasirNama; }
@@ -1588,77 +1443,50 @@ function genLapPenjualanCP(text, kemarin) {
     else if (key === 'parkirkomputer' || key === 'pkomp') d.parkirKomputer = value;
     else if (key === 'parkirluar' || key === 'pluar') d.parkirLuar = value;
   });
-  function fr(n) {
-    const v = parseFloat(n) || 0;
-    if (v === 0) return 'Rp. -';
-    return 'Rp. ' + v.toLocaleString('id-ID');
-  }
-  if (!d.nk1) d.nk1 = KASIR_CP_DEFAULT.k1;
-  if (!d.nk2) d.nk2 = KASIR_CP_DEFAULT.k2;
-  if (!d.nk3) d.nk3 = KASIR_CP_DEFAULT.k3;
-  if (!d.nk4) d.nk4 = KASIR_CP_DEFAULT.k4;
+  function fr(n) { const v = parseFloat(n) || 0; return v === 0 ? 'Rp. -' : 'Rp. ' + v.toLocaleString('id-ID'); }
+  if (!d.nk1) d.nk1 = KASIR_CP_DEFAULT.k1; if (!d.nk2) d.nk2 = KASIR_CP_DEFAULT.k2;
+  if (!d.nk3) d.nk3 = KASIR_CP_DEFAULT.k3; if (!d.nk4) d.nk4 = KASIR_CP_DEFAULT.k4;
   const totalUtama = d.k1 + d.k2 + d.k3 + d.k4;
   const totalParkir = d.parkirKomputer + d.parkirLuar;
-  let msg = 'Laporan Penjualan Toko Central Perabot Periode ' + t + '\n\n';
-  msg += 'Kassa 1 (' + d.nk1 + ') ' + fr(d.k1) + '\n';
-  msg += 'Kassa 2 (' + d.nk2 + ') ' + fr(d.k2) + '\n';
-  msg += 'Kassa 3 (' + d.nk3 + ') ' + fr(d.k3) + '\n';
-  msg += 'Kassa 4 (' + d.nk4 + ') ' + fr(d.k4) + '\n\n';
-  msg += 'Total Penjualan Keseluruhan: ' + fr(totalUtama) + '\n';
-  msg += '---------------------------------------------\n\n';
-  msg += 'Tunai  ' + fr(d.tunai) + '\n';
-  msg += 'Debit  ' + fr(d.debit) + '\n';
-  msg += 'Credit ' + fr(d.kredit) + '\n';
-  msg += '---------------------------------------------\n';
-  msg += '---------------------------------------------\n\n';
-  msg += 'Ecer: ' + fr(d.ecer) + '\n';
-  msg += 'Grosir : ' + fr(d.grosir) + '\n\n';
-  msg += '---------------------------------------------\n\n';
-  msg += 'Laporan Penjualan Kasir Promo\n';
-  msg += 'Periode ' + t + '\n\n';
-  msg += 'Total Penjualan Keseluruhan: ' + fr(d.promo) + '\n';
-  msg += '---------------------------------------------\n';
-  msg += 'Tunai  ' + fr(d.promoTunai) + '\n';
-  msg += 'Debit  ' + fr(d.promoDebit) + '\n';
-  msg += 'Credit ' + fr(d.promoKredit) + '\n';
-  msg += '---------------------------------------------\n\n';
-  msg += 'Laporan Parkir \n';
-  msg += 'Periode ' + t + '\n\n';
-  msg += 'Parkir di Komputer : ' + fr(d.parkirKomputer) + '\n';
-  msg += 'Parkir Stor Luar : ' + fr(d.parkirLuar) + '\n';
-  msg += '---------------------------------------------\n';
-  msg += 'Total Parkir  ' + fr(totalParkir) + '\n';
-  msg += '---------------------------------------------';
+  let msg = 'Laporan Penjualan Toko Central Perabot Alak Periode ' + t + '\n\n';
+  msg += 'Kassa 1 (' + d.nk1 + ') ' + fr(d.k1) + '\nKassa 2 (' + d.nk2 + ') ' + fr(d.k2) + '\n';
+  msg += 'Kassa 3 (' + d.nk3 + ') ' + fr(d.k3) + '\nKassa 4 (' + d.nk4 + ') ' + fr(d.k4) + '\n\n';
+  msg += 'Total Penjualan Keseluruhan: ' + fr(totalUtama) + '\n---------------------------------------------\n\n';
+  msg += 'Tunai  ' + fr(d.tunai) + '\nDebit  ' + fr(d.debit) + '\nCredit ' + fr(d.kredit) + '\n';
+  msg += '---------------------------------------------\n---------------------------------------------\n\n';
+  msg += 'Ecer: ' + fr(d.ecer) + '\nGrosir : ' + fr(d.grosir) + '\n\n---------------------------------------------\n\n';
+  msg += 'Laporan Penjualan Kasir Promo\nPeriode ' + t + '\n\n';
+  msg += 'Total Penjualan Keseluruhan: ' + fr(d.promo) + '\n---------------------------------------------\n';
+  msg += 'Tunai  ' + fr(d.promoTunai) + '\nDebit  ' + fr(d.promoDebit) + '\nCredit ' + fr(d.promoKredit) + '\n---------------------------------------------\n\n';
+  msg += 'Laporan Parkir \nPeriode ' + t + '\n\n';
+  msg += 'Parkir di Komputer : ' + fr(d.parkirKomputer) + '\nParkir Stor Luar : ' + fr(d.parkirLuar) + '\n---------------------------------------------\n';
+  msg += 'Total Parkir  ' + fr(totalParkir) + '\n---------------------------------------------';
   return msg;
 }
 
 function genLapHarga(text, namaToko, kemarin) {
-  const t = getTanggal(kemarin);
-  const h = kemarin ? 'Kemarin' : 'Ini';
-  const k = kemarin ? ' _(kemarin)_' : '';
+  const t = getTanggal(kemarin); const h = kemarin ? 'Kemarin' : 'Ini'; const k = kemarin ? ' _(kemarin)_' : '';
   const s = 'Selamat ' + getWaktu() + ' Team ' + namaToko;
-  const d = { baru: [], naik: [], turun: [], note: [] };
-  let mode = null;
+  const d = { baru:[], naik:[], turun:[], note:[] }; let mode = null;
   text.trim().split('\n').forEach(function(line) {
     const tr = line.trim(); if (!tr) return; const lo = tr.toLowerCase();
-    if (lo.indexOf('---baru---') >= 0 || lo === 'baru')  { mode = 'baru';  return; }
-    if (lo.indexOf('---naik---') >= 0 || lo === 'naik')  { mode = 'naik';  return; }
+    if (lo.indexOf('---baru---') >= 0 || lo === 'baru') { mode = 'baru'; return; }
+    if (lo.indexOf('---naik---') >= 0 || lo === 'naik') { mode = 'naik'; return; }
     if (lo.indexOf('---turun---') >= 0 || lo === 'turun') { mode = 'turun'; return; }
-    if (lo.indexOf('---note---') >= 0 || lo === 'note')   { mode = 'note';  return; }
+    if (lo.indexOf('---note---') >= 0 || lo === 'note') { mode = 'note'; return; }
     if (mode) d[mode].push(tr);
   });
   const cat = 'Nota Semuanya Sudah Diinput Di Sistem, Bisa Langsung Di Print Barcodenya Ya.\n\nMohon Dicek Kembali Fisik Barang Dengan Yang Di Input Disistem, Jika Ada Yang Tidak Sesuai Mohon Di Konfirmasi Lagi. Terima Kasih🙏🏼';
   let msg = s + '\n\nHarga Barang Untuk Hari ' + h + ' *' + t + '*' + k + '\n';
-  if (d.baru.length > 0)  { msg += '\n🆕 *Barang Yang Baru:*\n';        d.baru.forEach(function(b)  { msg += '• ' + b + '\n'; }); }
-  if (d.naik.length > 0)  { msg += '\n📈 *Barang Yang Naik Harga:*\n';  d.naik.forEach(function(b)  { msg += '• ' + b + '\n'; }); }
+  if (d.baru.length > 0) { msg += '\n🆕 *Barang Yang Baru:*\n'; d.baru.forEach(function(b) { msg += '• ' + b + '\n'; }); }
+  if (d.naik.length > 0) { msg += '\n📈 *Barang Yang Naik Harga:*\n'; d.naik.forEach(function(b) { msg += '• ' + b + '\n'; }); }
   if (d.turun.length > 0) { msg += '\n📉 *Barang Yang Turun Harga:*\n'; d.turun.forEach(function(b) { msg += '• ' + b + '\n'; }); }
-  if (d.note.length > 0)  { msg += '\n📝 *Catatan:*\n';                 d.note.forEach(function(b)  { msg += b + '\n'; }); }
+  if (d.note.length > 0) { msg += '\n📝 *Catatan:*\n'; d.note.forEach(function(b) { msg += b + '\n'; }); }
   return msg + '\n' + cat;
 }
 
 function genLapMarket(text, kemarin) {
-  const t = getTanggal(kemarin);
-  const k = kemarin ? ' _(kemarin)_' : '';
+  const t = getTanggal(kemarin); const k = kemarin ? ' _(kemarin)_' : '';
   const d = { oesapa:0, tdm:0, central:0, wa:0, shopee:0, tiktok:0, tokopedia:0, tunai:0, debit:0, kredit:0, nota:[] };
   text.trim().toLowerCase().split('\n').forEach(function(line) {
     const tr = line.trim(); if (!tr) return;
@@ -1668,151 +1496,61 @@ function genLapMarket(text, kemarin) {
   });
   const tT = d.oesapa + d.tdm + d.central;
   const tC = d.wa + d.shopee + d.tiktok + d.tokopedia;
-  let nt = '';
-  if (d.nota.length > 0) { nt = '\n'; d.nota.forEach(function(n) { nt += '- Nomor Nota ' + n + '\n'; }); }
+  let nt = ''; if (d.nota.length > 0) { nt = '\n'; d.nota.forEach(function(n) { nt += '- Nomor Nota ' + n + '\n'; }); }
   return GARIS_TEBAL + '\n🛒 *Total Penjualan Marketplace*\n*Perabot Mama*\n📅 Periode ' + t + k +
-    '\n' + GARIS_TEBAL + '\n🏦 *Per Toko*\n' +
-    '• Toko Perabot Mama Oesapa : ' + fRp(d.oesapa)  + '\n' +
-    '• Toko Perabot Mama TDM    : ' + fRp(d.tdm)     + '\n' +
-    '• Toko Central Perabot     : ' + fRp(d.central) + '\n' +
-    GARIS_TIPIS + '\n💰 *Total* : ' + fRp(tT) + '\n\n📱 *Per Channel*\n' +
-    '• WA        : ' + fRp(d.wa) + '\n• Shopee    : ' + fRp(d.shopee) + '\n' +
-    '• Tiktok    : ' + fRp(d.tiktok) + '\n• Tokopedia : ' + fRp(d.tokopedia) + '\n' +
-    GARIS_TIPIS + '\n💰 *Total Penjualan* : ' + fRp(tC) + '\n\n💳 *Metode Bayar*\n' +
-    '• Tunai/CASH : ' + fRp(d.tunai) + '\n• Debit/TF   : ' + fRp(d.debit) + '\n• Credit     : ' + fRp(d.kredit) + '\n' +
-    GARIS_TEBAL + '\n' + nt + '_Laporan otomatis_';
+    '\n' + GARIS_TEBAL + '\n🏦 *Per Toko*\n• Oesapa: ' + fRp(d.oesapa) + '\n• TDM: ' + fRp(d.tdm) + '\n• Central: ' + fRp(d.central) +
+    '\n' + GARIS_TIPIS + '\n💰 *Total*: ' + fRp(tT) + '\n\n📱 *Per Channel*\n• WA: ' + fRp(d.wa) + '\n• Shopee: ' + fRp(d.shopee) +
+    '\n• Tiktok: ' + fRp(d.tiktok) + '\n• Tokopedia: ' + fRp(d.tokopedia) +
+    '\n' + GARIS_TIPIS + '\n💰 *Total*: ' + fRp(tC) + '\n\n💳 *Metode Bayar*\n• Tunai: ' + fRp(d.tunai) + '\n• Debit: ' + fRp(d.debit) + '\n• Credit: ' + fRp(d.kredit) +
+    '\n' + GARIS_TEBAL + '\n' + nt + '_Laporan otomatis_';
 }
 
 // ════════════════════════════════════════════════════════════════
-//   17. HANDLER ADMIN
+//   19. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
   log.info('ADMIN', 'Cmd: ' + low);
-  if (low.startsWith('daftar ')) {
-    const nomor = msg.substring(7).trim().replace(/[^0-9]/g, '');
-    if (!nomor) { await kirimWA(sender, '⚠️ Format: daftar 6281234567890'); return true; }
-    const r = tambahMember(nomor);
-    if (!r.ok) { await kirimWA(sender, '⚠️ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ *Member Terdaftar!*\n📱 ' + nomor + '\n👤 ' + (getNama(nomor) || '(belum ada)') +
-      '\n📊 Total: ' + MEMBERS.length + '/' + CONFIG.maxMember);
-    return true;
-  }
-  if (low.startsWith('hapus ')) {
-    const nomor = msg.substring(6).trim().replace(/[^0-9]/g, '');
-    const r = hapusMember(nomor);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ Member ' + nomor + ' dihapus!\n📊 Total: ' + MEMBERS.length + '/' + CONFIG.maxMember);
-    return true;
-  }
-  if (low === 'listmember') {
-    try {
-      let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n------------------\n';
-      if (MEMBERS.length === 0) m += '(belum ada member)\n';
-      else for (let i = 0; i < MEMBERS.length; i++) {
-        m += (i + 1) + '. ' + MEMBERS[i] + '\n   ' + (KONTAK[MEMBERS[i]] || '(belum ada nama)') + '\n';
-      }
-      m += '------------------\nSlot tersisa: ' + (CONFIG.maxMember - MEMBERS.length);
-      await kirimWA(sender, m);
-    } catch (e) { await kirimWA(sender, 'Error: ' + e.message); }
-    return true;
-  }
-  if (low.startsWith('namakontak ')) {
-    const p = msg.substring(11).trim().split(/\s+/);
-    if (p.length < 2) { await kirimWA(sender, '⚠️ Format: namakontak 628xxx Nama'); return true; }
-    const nomor = p[0].replace(/[^0-9]/g, '');
-    const nama  = p.slice(1).join(' ');
-    const r = setNama(nomor, nama);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ Nama disimpan!\n📱 ' + nomor + ' → 👤 ' + nama);
-    return true;
-  }
-  if (low.startsWith('hapuskontak ')) {
-    const nomor = msg.substring(12).trim().replace(/[^0-9]/g, '');
-    const r = hapusKontak(nomor);
-    if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; }
-    await kirimWA(sender, '✅ Kontak ' + nomor + ' dihapus!');
-    return true;
-  }
-  if (low === 'listkontak') {
-    const keys = Object.keys(KONTAK);
-    let m = 'Daftar Kontak (' + keys.length + ')\n------------------\n';
-    keys.forEach(function(k, i) { m += (i + 1) + '. ' + k + '\n   ' + KONTAK[k] + '\n'; });
-    await kirimWA(sender, m);
-    return true;
-  }
-  if (low === 'reload') {
-    const ok = loadExcel();
-    await kirimWA(sender, ok ? '✅ Excel reloaded! Total: ' + DATA_BARANG.length + ' item' : '❌ Gagal reload');
-    return true;
-  }
-  if (low === 'resetall') {
-    SESI = {};
-    saveJSON(CONFIG.paths.sesi, SESI);
-    await kirimWA(sender, '✅ *Semua sesi user direset!*\n\nSekarang semua user akan mulai dari menu utama.');
-    return true;
-  }
-  if (low === 'info') {
-    const up = Math.floor(process.uptime());
-    const jam = Math.floor(up / 3600), mnt = Math.floor((up % 3600) / 60);
-    let aiStatus = '';
-    if (CONFIG.groqKey) aiStatus += '\n  ✅ Groq';
-    if (CONFIG.geminiKey) aiStatus += '\n  ✅ Gemini (' + geminiKeys().length + ' keys)';
-    if (CONFIG.openrouterKey) aiStatus += '\n  ✅ OpenRouter';
-    if (!aiStatus) aiStatus = '\n  ⚠️ Tidak ada AI provider';
-    await kirimWA(sender, 'ℹ️ Info Sistem v3.12\n------------------' +
-      '\nUptime: ' + jam + 'j ' + mnt + 'm\nMember: ' + MEMBERS.length + '/' + CONFIG.maxMember +
-      '\nData: ' + DATA_BARANG.length + ' item\nKontak: ' + Object.keys(KONTAK).length +
-      '\nSesi: ' + Object.keys(SESI).length + '\nNode: ' + process.version +
-      '\n\n🤖 AI Providers:' + aiStatus +
-      '\n\n💡 Tip: ketik *resetall* untuk reset semua sesi user');
-    return true;
-  }
+  if (low.startsWith('daftar ')) { const nomor = msg.substring(7).trim().replace(/[^0-9]/g, ''); if (!nomor) { await kirimWA(sender, '⚠️ Format: daftar 628xxx'); return true; } const r = tambahMember(nomor); if (!r.ok) { await kirimWA(sender, '⚠️ ' + r.alasan); return true; } await kirimWA(sender, '✅ Member terdaftar! ' + nomor + '\n📊 Total: ' + MEMBERS.length + '/' + CONFIG.maxMember); return true; }
+  if (low.startsWith('hapus ')) { const nomor = msg.substring(6).trim().replace(/[^0-9]/g, ''); const r = hapusMember(nomor); if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; } await kirimWA(sender, '✅ Member ' + nomor + ' dihapus!'); return true; }
+  if (low === 'listmember') { try { let m = 'Daftar Member (' + MEMBERS.length + '/' + CONFIG.maxMember + ')\n------------------\n'; if (MEMBERS.length === 0) m += '(kosong)\n'; else for (let i = 0; i < MEMBERS.length; i++) { m += (i+1) + '. ' + MEMBERS[i] + '\n   ' + (KONTAK[MEMBERS[i]] || '(belum ada nama)') + '\n'; } m += '------------------\nSlot tersisa: ' + (CONFIG.maxMember - MEMBERS.length); await kirimWA(sender, m); } catch (e) { await kirimWA(sender, 'Error: ' + e.message); } return true; }
+  if (low.startsWith('namakontak ')) { const p = msg.substring(11).trim().split(/\s+/); if (p.length < 2) { await kirimWA(sender, '⚠️ Format: namakontak 628xxx Nama'); return true; } const nomor = p[0].replace(/[^0-9]/g, ''); const nama = p.slice(1).join(' '); const r = setNama(nomor, nama); if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; } await kirimWA(sender, '✅ ' + nomor + ' → ' + nama); return true; }
+  if (low.startsWith('hapuskontak ')) { const nomor = msg.substring(12).trim().replace(/[^0-9]/g, ''); const r = hapusKontak(nomor); if (!r.ok) { await kirimWA(sender, '❌ ' + r.alasan); return true; } await kirimWA(sender, '✅ Kontak ' + nomor + ' dihapus!'); return true; }
+  if (low === 'listkontak') { const keys = Object.keys(KONTAK); let m = 'Daftar Kontak (' + keys.length + ')\n------------------\n'; keys.forEach(function(k, i) { m += (i+1) + '. ' + k + '\n   ' + KONTAK[k] + '\n'; }); await kirimWA(sender, m); return true; }
+  if (low === 'reload') { const ok = loadExcel(); await kirimWA(sender, ok ? '✅ Reloaded! ' + DATA_BARANG.length + ' item' : '❌ Gagal'); return true; }
+  if (low === 'resetall') { SESI = {}; saveJSON(CONFIG.paths.sesi, SESI); await kirimWA(sender, '✅ Semua sesi direset!'); return true; }
+  if (low === 'info') { const up = Math.floor(process.uptime()); const jam = Math.floor(up/3600), mnt = Math.floor((up%3600)/60); let ai = ''; if (CONFIG.groqKey) ai += '\n  ✅ Groq'; if (CONFIG.geminiKey) ai += '\n  ✅ Gemini (' + geminiKeys().length + ' keys)'; if (CONFIG.openrouterKey) ai += '\n  ✅ OpenRouter'; if (!ai) ai = '\n  ⚠️ Tidak ada'; await kirimWA(sender, 'ℹ️ Info Sistem v3.13\n------------------\nUptime: ' + jam + 'j ' + mnt + 'm\nMember: ' + MEMBERS.length + '/' + CONFIG.maxMember + '\nData: ' + DATA_BARANG.length + ' item\nSesi: ' + Object.keys(SESI).length + '\n\n🤖 AI:' + ai); return true; }
   return false;
 }
 
 // ════════════════════════════════════════════════════════════════
-//   18. ROUTES
+//   20. ROUTES
 // ════════════════════════════════════════════════════════════════
 
-app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v3.12', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
-});
-app.get('/reload', function(req, res) {
-  const ok = loadExcel();
-  res.json({ success: ok, total: DATA_BARANG.length });
-});
-app.get('/resetsesi/:nomor', function(req, res) {
-  resetSesi(req.params.nomor);
-  res.json({ ok: true, msg: 'Sesi ' + req.params.nomor + ' direset' });
-});
-app.get('/resetall', function(req, res) {
-  SESI = {};
-  saveJSON(CONFIG.paths.sesi, SESI);
-  log.info('SESI', 'ALL SESSIONS CLEARED via endpoint');
-  res.json({ ok: true, message: 'Semua sesi direset' });
-});
+app.get('/', function(req, res) { res.json({ status: 'ok', app: CONFIG.appName + ' v3.13', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember }); });
+app.get('/reload', function(req, res) { const ok = loadExcel(); res.json({ success: ok, total: DATA_BARANG.length }); });
+app.get('/resetsesi/:nomor', function(req, res) { resetSesi(req.params.nomor); res.json({ ok: true }); });
+app.get('/resetall', function(req, res) { SESI = {}; saveJSON(CONFIG.paths.sesi, SESI); res.json({ ok: true, message: 'Semua sesi direset' }); });
 
 // ════════════════════════════════════════════════════════════════
-//   19. WEBHOOK UTAMA
+//   21. ★★★ WEBHOOK UTAMA (dengan SCAN FOTO MULTI-STEP) ★★★
 // ════════════════════════════════════════════════════════════════
 
-const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home', 'keluar', 'exit', 'stop', 'reset'];
+const KATA_RESET = ['batal','menu','mulai','start','kembali','home','keluar','exit','stop','reset'];
 
 app.post('/webhook', async function(req, res) {
   res.sendStatus(200);
 
   try {
-    const body    = req.body || {};
-    const sender  = body.sender || body.from || body.phone || null;
+    const body = req.body || {};
+    const sender = body.sender || body.from || body.phone || null;
     const message = (body.message || body.text || body.msg || '').trim();
-    const image   = body.image || body.file || body.media || '';
-
+    const image = body.image || body.file || body.media || '';
     if (!sender) return;
     const msg = message;
     const low = msg.toLowerCase();
 
-    log.info('WEBHOOK', sender + ': ' + msg.substring(0, 50));
+    log.info('WEBHOOK', sender + ': ' + (image ? '[FOTO] ' : '') + msg.substring(0, 50));
 
     // ── SAPAAN PERTAMA ──
     if (!SUDAH_DISAPA[sender]) {
@@ -1824,7 +1562,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── ADMIN COMMAND ──
+    // ── ADMIN ──
     if (isAdmin(sender) && isAdminCommand(low)) {
       if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu || SESI[sender].adminAksi)) resetSesi(sender);
       const handled = await handleAdmin(sender, msg, low);
@@ -1832,17 +1570,16 @@ app.post('/webhook', async function(req, res) {
     }
 
     const _s = SESI[sender] || {};
-    const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive;
+    const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive || _s.scanActive;
 
-    // ★★★ RESET — FORCE RESET TOTAL ★★★
+    // ── RESET ──
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
-      log.info('RESET', 'User reset sesi: ' + sender + ' kata: ' + low);
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
       return;
     }
 
-    // ── SAPAAN PINTAR ──
+    // ── SAPAAN ──
     const kataSapaan = isSapaan(low);
     if (kataSapaan && !_lagiInput && !_s.pendingPindahToko) {
       await kirimWA(sender, sapaanBerikutnya(sender, kataSapaan));
@@ -1858,538 +1595,390 @@ app.post('/webhook', async function(req, res) {
     const s = getSesi(sender);
 
     // ════════════════════════════════════════════════════════════
+    //   ★★★ SCAN FOTO MODE ★★★
+    // ════════════════════════════════════════════════════════════
+    if (s.scanActive) {
+      const scanData = s.scanData || {};
+      const currentStepIdx = s.scanStepIdx || 0;
+      const tokoKode = s.toko;
+      const namaToko = NAMA_TOKO[tokoKode];
+      const steps = SCAN_STEPS[tokoKode];
+      
+      if (!steps || currentStepIdx >= steps.length) {
+        // Semua step selesai → generate laporan
+        const text = wizardToText(scanData, tokoKode);
+        const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
+        if (laporan) {
+          await kirimWA(sender, laporan);
+          resetSesi(sender);
+          await tunggu(1500);
+          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+        }
+        return;
+      }
+      
+      const stepInfo = steps[currentStepIdx];
+      
+      // Handle review
+      if (low === 'review') {
+        await kirimWA(sender, wizardScanReview(tokoKode, scanData, namaToko));
+        return;
+      }
+      
+      // Handle selesai paksa
+      if (low === 'selesai' || low === 'finish' || low === 'done') {
+        // Isi field yang belum ada dengan 0
+        const allFields = FIELD_LAPORAN[tokoKode];
+        allFields.forEach(function(f) { if (scanData[f.key] === undefined) scanData[f.key] = 0; });
+        const text = wizardToText(scanData, tokoKode);
+        const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
+        if (laporan) {
+          await kirimWA(sender, laporan);
+          resetSesi(sender);
+          await tunggu(1500);
+          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+        }
+        return;
+      }
+      
+      // Handle lanjut (setelah review)
+      if (low === 'lanjut' || low === 'next' || low === 'continue') {
+        await kirimWA(sender, msgMintaFoto(tokoKode, currentStepIdx, namaToko, scanData));
+        return;
+      }
+      
+      // Handle skip
+      if (low === 'skip' || low === 'lewati') {
+        stepInfo.fields.forEach(function(f) { scanData[f] = 0; });
+        const nextIdx = currentStepIdx + 1;
+        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
+        
+        if (nextIdx >= steps.length) {
+          // Semua selesai
+          const text = wizardToText(scanData, tokoKode);
+          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
+          if (laporan) {
+            await kirimWA(sender, laporan);
+            resetSesi(sender);
+            await tunggu(1500);
+            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+          }
+        } else {
+          await tunggu(300);
+          await kirimWA(sender, '⏭️ _Dilewati_\n\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
+        }
+        return;
+      }
+      
+      // ★★★ HANDLE MANUAL INPUT (untuk step parkir) ★★★
+      if (stepInfo.scanField === 'manual') {
+        let nominal = 0;
+        if (msg === '-' || low === 'kosong' || low === 'null' || low === '0') nominal = 0;
+        else {
+          const angka = msg.replace(/[^0-9]/g, '');
+          if (!angka) { await kirimWA(sender, '⚠️ Ketik angka saja atau *-* untuk kosong'); return; }
+          nominal = parseInt(angka);
+        }
+        
+        scanData[stepInfo.fields[0]] = nominal;
+        const nextIdx = currentStepIdx + 1;
+        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
+        
+        const fr = nominal === 0 ? 'Rp. -' : 'Rp. ' + nominal.toLocaleString('id-ID');
+        
+        if (nextIdx >= steps.length) {
+          // Semua selesai
+          await kirimWA(sender, '✅ _' + stepInfo.label + ': ' + fr + ' disimpan_\n\n🎉 *Semua data lengkap!*\n⏳ _Generate laporan..._');
+          await tunggu(800);
+          const text = wizardToText(scanData, tokoKode);
+          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
+          if (laporan) {
+            await kirimWA(sender, laporan);
+            resetSesi(sender);
+            await tunggu(1500);
+            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+          }
+        } else {
+          await tunggu(300);
+          await kirimWA(sender, '✅ _' + stepInfo.label + ': ' + fr + ' disimpan_\n\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
+        }
+        return;
+      }
+      
+      // ★★★ HANDLE FOTO ATAU ANGKA MANUAL ★★★
+      let hasilScan = null;
+      
+      if (image && image.length > 0) {
+        // SCAN FOTO
+        await kirimWA(sender, '📸 _Scanning foto ' + stepInfo.label + '..._');
+        try {
+          const prompt = SCAN_PROMPTS[stepInfo.scanField] || SCAN_PROMPTS.total_transaksi;
+          const aiResult = await analisaGambar(image, prompt);
+          log.info('SCAN', 'AI result: ' + aiResult.substring(0, 100));
+          
+          if (stepInfo.scanField === 'total_transaksi') {
+            const angka = parseScanSingle(aiResult);
+            hasilScan = {};
+            hasilScan[stepInfo.fields[0]] = angka;
+          } else if (stepInfo.scanField === 'multi' || stepInfo.scanField === 'multi_promo') {
+            hasilScan = parseScanMulti(aiResult, stepInfo.fields);
+          }
+        } catch (e) {
+          log.error('SCAN', 'Gagal: ' + e.message);
+          await kirimWA(sender, '❌ Gagal scan foto. Coba kirim ulang atau ketik angka manual.');
+          return;
+        }
+      } else if (msg) {
+        // MANUAL ANGKA
+        if (stepInfo.fields.length === 1) {
+          let nominal = 0;
+          if (msg === '-' || low === 'kosong') nominal = 0;
+          else {
+            const angka = msg.replace(/[^0-9]/g, '');
+            if (!angka) { await kirimWA(sender, '⚠️ Ketik angka saja atau kirim foto'); return; }
+            nominal = parseInt(angka);
+          }
+          hasilScan = {};
+          hasilScan[stepInfo.fields[0]] = nominal;
+        } else {
+          // Multi-field manual → parse format "field: angka"
+          hasilScan = parseScanMulti(msg, stepInfo.fields);
+        }
+      } else return;
+      
+      if (hasilScan) {
+        // Simpan hasil
+        Object.keys(hasilScan).forEach(function(k) { scanData[k] = hasilScan[k]; });
+        const nextIdx = currentStepIdx + 1;
+        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
+        
+        // Format konfirmasi
+        let konfirmasi = '✅ *Data disimpan:*\n';
+        Object.keys(hasilScan).forEach(function(k) {
+          const v = hasilScan[k];
+          const fr = v === 0 ? 'Rp. -' : 'Rp. ' + v.toLocaleString('id-ID');
+          konfirmasi += '   • ' + k + ': ' + fr + '\n';
+        });
+        
+        if (nextIdx >= steps.length) {
+          await kirimWA(sender, konfirmasi + '\n🎉 *Semua data lengkap!*\n⏳ _Generate laporan..._');
+          await tunggu(800);
+          const text = wizardToText(scanData, tokoKode);
+          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
+          if (laporan) {
+            await kirimWA(sender, laporan);
+            resetSesi(sender);
+            await tunggu(1500);
+            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+          }
+        } else {
+          await tunggu(300);
+          await kirimWA(sender, konfirmasi + '\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
+        }
+      }
+      return;
+    }
+
+    // ════════════════════════════════════════════════════════════
     //   MODE CARI (dengan konfirmasi pindah toko)
-    //   PENTING: HANYA aktif kalau s.mode === 'cari' BENAR-BENAR
     // ════════════════════════════════════════════════════════════
     if (s.mode === 'cari') {
-      log.info('MODE_CARI', 'Aktif - tokoKode: ' + (s.tokoKode || 'null'));
-      
-      // ★ HANDLE KONFIRMASI PINDAH TOKO ★
       if (s.pendingPindahToko) {
         if (isKonfirmasiYa(low)) {
           const tokoBaru = s.pendingPindahToko.toko;
           const keyword = s.pendingPindahToko.keyword;
           updateSesi(sender, { tokoKode: tokoBaru.kode, pendingPindahToko: null });
-          await kirimWA(sender, '✅ *Berpindah ke ' + tokoBaru.nama + '*\n\n🔍 Mencari "_' + keyword + '_"...');
+          await kirimWA(sender, '✅ *Pindah ke ' + tokoBaru.nama + '*');
           await tunggu(500);
           if (keyword && keyword.length >= 2) {
             await kirimWA(sender, formatHasil(cariBarang(keyword), tokoBaru.kode, sender));
             await tunggu(800);
             await kirimWA(sender, getMenuCariUlang(tokoBaru.nama));
-          } else {
-            await kirimWA(sender, getMenuSiapCari(tokoBaru.nama));
-          }
+          } else await kirimWA(sender, getMenuSiapCari(tokoBaru.nama));
           return;
         }
-        if (isKonfirmasiTidak(low)) {
-          updateSesi(sender, { pendingPindahToko: null });
-          await kirimWA(sender, '👍 OK, tetap di *' + NAMA_TOKO[s.tokoKode] + '*\n\nKetik nama/kode barang, atau ketik *batal* untuk menu utama.');
-          return;
-        }
-        await kirimWA(sender, '🤔 Saya tidak yakin maksud kamu.\n\n💬 Jawab dengan:\n   • *iya* / *ya* / *oke* → pindah toko\n   • *tidak* → tetap di sini\n   • *batal* → menu utama');
-        return;
+        if (isKonfirmasiTidak(low)) { updateSesi(sender, { pendingPindahToko: null }); await kirimWA(sender, '👍 Tetap di *' + NAMA_TOKO[s.tokoKode] + '*'); return; }
+        await kirimWA(sender, '🤔 Jawab *iya* / *tidak* / *batal*'); return;
       }
-      
-      // Belum pilih toko
       if (!s.tokoKode) {
-        if (low === '9') { updateSesi(sender, { tokoKode: null }); await kirimWA(sender, getMenuPilihToko('cari')); return; }
         const toko = parsePilihanToko(low);
         if (toko) {
           updateSesi(sender, { tokoKode: toko.kode });
-          if (s.pendingKw) {
-            const kw = s.pendingKw;
-            updateSesi(sender, { pendingKw: null });
-            await kirimWA(sender, formatHasil(cariBarang(kw), toko.kode, sender));
-            await tunggu(800);
-            await kirimWA(sender, getMenuCariUlang(toko.nama));
-          } else {
-            await kirimWA(sender, getMenuSiapCari(toko.nama));
-          }
+          if (s.pendingKw) { const kw = s.pendingKw; updateSesi(sender, { pendingKw: null }); await kirimWA(sender, formatHasil(cariBarang(kw), toko.kode, sender)); await tunggu(800); await kirimWA(sender, getMenuCariUlang(toko.nama)); }
+          else await kirimWA(sender, getMenuSiapCari(toko.nama));
           return;
         }
-        await kirimWA(sender, getMenuPilihToko('cari'));
-        return;
+        await kirimWA(sender, getMenuPilihToko('cari')); return;
       }
-      
-      // Ganti toko
-      if (low === '9' || low === 'ganti toko' || low === 'ganti') {
-        updateSesi(sender, { tokoKode: null });
-        await kirimWA(sender, getMenuPilihToko('cari'));
-        return;
-      }
-      
+      if (low === '9' || low === 'ganti toko' || low === 'ganti') { updateSesi(sender, { tokoKode: null }); await kirimWA(sender, getMenuPilihToko('cari')); return; }
       if (!msg) return;
       
-      // Cek apakah user sebut toko lain
-      const tokoLainDisebut = deteksiTokoDariTeks(low);
-      const tokoBerbeda = tokoLainDisebut.filter(function(t) { return t.kode !== s.tokoKode; });
-      
-      if (tokoBerbeda.length > 0) {
-        const tokoSekarang = NAMA_TOKO[s.tokoKode];
-        const tokoTarget = tokoBerbeda[0];
-        const keywordBersih = bersihkanKeywordDariToko(msg);
-        
-        updateSesi(sender, {
-          pendingPindahToko: { toko: tokoTarget, keyword: keywordBersih }
-        });
-        
-        let respKonf = '🤔 *Hmm, sebentar...*\n';
-        respKonf += GARIS_TEBAL + '\n';
-        respKonf += '📍 Kamu sedang di mode cari:\n';
-        respKonf += '   *' + tokoSekarang + '*\n\n';
-        respKonf += '🎯 Tapi kamu sebut toko lain:\n';
-        respKonf += '   *' + tokoTarget.nama + '*\n\n';
-        if (keywordBersih) respKonf += '🔍 Kata kunci: _"' + keywordBersih + '"_\n\n';
-        respKonf += GARIS_TEBAL + '\n';
-        respKonf += '❓ *Pindah ke ' + tokoTarget.nama + '?*\n\n';
-        respKonf += '💬 Jawab:\n';
-        respKonf += '   ✅ *iya* / *ya* / *oke* → pindah & cari\n';
-        respKonf += '   ❌ *tidak* → tetap di sini\n';
-        respKonf += '   🔙 *batal* → kembali ke menu';
-        
-        await kirimWA(sender, respKonf);
+      const tokoLain = deteksiTokoDariTeks(low);
+      const tokoBeda = tokoLain.filter(function(t) { return t.kode !== s.tokoKode; });
+      if (tokoBeda.length > 0) {
+        const tokoTarget = tokoBeda[0];
+        const kwBersih = bersihkanKeywordDariToko(msg);
+        updateSesi(sender, { pendingPindahToko: { toko: tokoTarget, keyword: kwBersih } });
+        await kirimWA(sender, '🤔 *Hmm...*\n' + GARIS_TEBAL + '\n📍 Kamu di: *' + NAMA_TOKO[s.tokoKode] + '*\n🎯 Tapi sebut: *' + tokoTarget.nama + '*\n' + (kwBersih ? '🔍 Keyword: _' + kwBersih + '_\n' : '') + GARIS_TEBAL + '\n❓ *Pindah ke ' + tokoTarget.nama + '?*\n\n✅ *iya* | ❌ *tidak* | 🔙 *batal*');
         return;
       }
       
-      // Normal: cari di toko aktif
       await kirimWA(sender, formatHasil(cariBarang(msg), s.tokoKode, sender));
       await tunggu(800);
       await kirimWA(sender, getMenuCariUlang(NAMA_TOKO[s.tokoKode]));
       return;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //   AI CHAT BARANG (TIDAK aktif kalau di mode cari)
-    // ════════════════════════════════════════════════════════════
+    // ── AI CHAT BARANG ──
     if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
-      log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
       const tokoDisebutAI = deteksiTokoDariTeks(low);
-      log.info('AI_CHAT', 'Toko terdeteksi: ' + (tokoDisebutAI.map(function(t) { return t.kode; }).join(',') || 'SEMUA'));
-      
       await kirimWA(sender, '🤖 _Sedang berpikir..._');
       let aiJawaban = null;
-      try { aiJawaban = await aiChatBarang(msg, sender, null); } 
-      catch (e) { log.error('AI_CHAT', 'Exception: ' + e.message); }
-      
-      if (aiJawaban && aiJawaban.length > 10) {
-        await kirimWA(sender, '🤖 ' + aiJawaban);
-        return;
-      }
-      
-      log.warn('AI_CHAT', 'AI return kosong, fallback ke cari biasa');
+      try { aiJawaban = await aiChatBarang(msg, sender, null); } catch (e) { log.error('AI_CHAT', e.message); }
+      if (aiJawaban && aiJawaban.length > 10) { await kirimWA(sender, '🤖 ' + aiJawaban); return; }
+      // Fallback
       const hasil = cariBarang(msg);
       if (hasil.hasil && hasil.hasil.length > 0) {
         let resp = '🤖 *Hasil Pencarian:*\n' + GARIS_TEBAL + '\n\n';
-        const items = hasil.hasil.slice(0, 5);
-        const tokoUntukTampil = tokoDisebutAI.length > 0 ? tokoDisebutAI : TOKO_LIST;
-        if (tokoDisebutAI.length > 0) {
-          resp += '🎯 *Filter Toko:* ' + tokoDisebutAI.map(function(t) { return t.nama; }).join(', ') + '\n\n';
-        }
-        items.forEach(function(d, i) {
-          resp += '*' + (i + 1) + '. ' + d.nama + '*\n';
-          resp += '🔖 Kode: _' + d.kode + '_\n';
-          resp += '📏 Satuan: ' + d.satuan + '\n\n';
-          resp += '💰 *Harga & Stok:*\n';
-          tokoUntukTampil.forEach(function(t) {
+        const tokoShow = tokoDisebutAI.length > 0 ? tokoDisebutAI : TOKO_LIST;
+        hasil.hasil.slice(0, 5).forEach(function(d, i) {
+          resp += '*' + (i+1) + '. ' + d.nama + '* (' + d.kode + ')\n';
+          tokoShow.forEach(function(t) {
             const h = d.harga[t.kode];
-            const stok = h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong';
-            resp += '🏪 _' + t.nama + '_\n';
-            resp += '   • Ecer: ' + fRp(h.ecer) + '\n';
-            resp += '   • Ambil: ' + fRp(h.ambil) + '\n';
-            resp += '   • Stok: ' + stok + '\n';
+            resp += '🏪 ' + t.nama + ': ' + fRp(h.ecer) + ' | Stok: ' + (h.stok > 0 ? h.stok : '⚠️ Kosong') + '\n';
           });
-          if (i < items.length - 1) resp += '\n' + GARIS_TIPIS + '\n\n';
+          if (i < 4) resp += '\n';
         });
-        resp += '\n' + GARIS_TEBAL + '\n💡 Ada yang ingin ditanyakan lagi?';
         await kirimWA(sender, resp);
         return;
       }
-      if (hasil.saran && hasil.saran.length > 0) {
-        let resp = '🤔 *Tidak ada yang persis cocok*\n' + GARIS_TEBAL + '\n\n💡 Mungkin yang dimaksud:\n\n';
-        hasil.saran.slice(0, 5).forEach(function(d, i) {
-          const minHarga = Math.min(d.harga.nk.ecer || 999999999, d.harga.tdm.ecer || 999999999, d.harga.oesapa.ecer || 999999999, d.harga.kefa.ecer || 999999999, d.harga.cp.ecer || 999999999);
-          resp += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | 💰 mulai ' + fRp(minHarga) + '\n\n';
-        });
-        resp += GARIS_TEBAL + '\n💡 Ketik kode atau nama lebih spesifik';
-        await kirimWA(sender, resp);
-        return;
-      }
-      await kirimWA(sender, '🤔 *Maaf, tidak ditemukan*\n' + GARIS_TEBAL + '\n\nKata kunci tidak cocok di database.\n\n💡 Coba:\n• Pakai kata lebih singkat\n• Ketik *menu* → pilih *4* untuk cari manual');
-      return;
+      await kirimWA(sender, '🤔 Tidak ditemukan. Ketik *menu* untuk cari manual.'); return;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //   ANALISA BANDING HARGA
-    // ════════════════════════════════════════════════════════════
+    // ── BANDING HARGA ──
     if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
-      log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
-      await kirimWA(sender, '📊 _Menganalisa perbandingan harga..._');
-      
+      await kirimWA(sender, '📊 _Menganalisa..._');
       try {
-        const tanyaTermurah = low.indexOf('murah') >= 0;
-        const tanyaTermahal = low.indexOf('mahal') >= 0;
         const tokoDisebut = deteksiTokoDariTeks(low);
-        
-        let keyword = msg
-          .replace(/banding(kan)?/gi, '').replace(/termurah|termahal|paling murah|paling mahal/gi, '')
-          .replace(/lebih murah|lebih mahal/gi, '').replace(/dimana murah|dimana mahal|toko mana/gi, '')
-          .replace(/selisih|beda harga|perbedaan harga/gi, '').replace(/analisa harga|analisis harga|compare/gi, '')
-          .replace(/di toko|harga|harganya/gi, '').replace(/\bdan\b|\bdengan\b|\bvs\b|\batau\b/gi, ' ')
-          .replace(/\bdi\b|\bke\b/gi, ' ');
-        
+        let keyword = msg.replace(/banding(kan)?|termurah|termahal|paling murah|paling mahal|lebih murah|lebih mahal|dimana murah|dimana mahal|selisih|beda harga|analisa harga|compare|di toko|harga|harganya/gi, '').replace(/\bdan\b|\bdengan\b|\bvs\b|\batau\b|\bdi\b|\bke\b/gi, ' ');
         TOKO_LIST.forEach(function(t) {
-          const regexKode = new RegExp('\\b' + t.kode + '\\b', 'gi');
-          keyword = keyword.replace(regexKode, '');
-          t.alias.forEach(function(a) {
-            keyword = keyword.replace(new RegExp('\\b' + a + '\\b', 'gi'), '');
-          });
-          const kataNama = t.nama.toLowerCase().split(/\s+/);
-          kataNama.forEach(function(kn) {
-            if (kn.length >= 4) keyword = keyword.replace(new RegExp('\\b' + kn + '\\b', 'gi'), '');
-          });
+          keyword = keyword.replace(new RegExp('\\b' + t.kode + '\\b', 'gi'), '');
+          t.alias.forEach(function(a) { keyword = keyword.replace(new RegExp('\\b' + a + '\\b', 'gi'), ''); });
         });
-        
         keyword = keyword.trim().replace(/\s+/g, ' ');
-        
-        if (!keyword || keyword.length < 2) {
-          await kirimWA(sender, '⚠️ *Format kurang jelas*\n\n💡 Contoh:\n• _bandingkan harga NN00001_\n• _panci eagle termurah_\n• _selisih harga dandang di nk dan tdm_');
-          return;
-        }
-        
+        if (!keyword || keyword.length < 2) { await kirimWA(sender, '⚠️ Contoh: _bandingkan harga NN00001_'); return; }
         const hasilCari = cariBarangPrioritas(keyword);
-        const items = hasilCari.hasil || [];
-        
-        if (items.length === 0) {
-          const hasilFuzzy = cariBarang(keyword);
-          if (hasilFuzzy.saran && hasilFuzzy.saran.length > 0) {
-            let resp = '🤔 *Tidak ditemukan persis*\n' + GARIS_TEBAL + '\n\n💡 Mungkin maksud kamu:\n\n';
-            hasilFuzzy.saran.slice(0, 5).forEach(function(d, i) {
-              resp += '*' + (i + 1) + '.* ' + d.nama + ' (' + d.kode + ')\n';
-            });
-            await kirimWA(sender, resp);
-            return;
-          }
-          await kirimWA(sender, '❌ *Barang tidak ditemukan*\n\nKata kunci: _"' + keyword + '"_');
-          return;
-        }
-        
-        if (items.length === 1) {
-          await kirimWA(sender, formatAnalisaBandingHargaToko(items[0], tokoDisebut, sender));
-          return;
-        }
-        
-        const jenisAnalisa = tanyaTermurah ? 'termurah' : tanyaTermahal ? 'termahal' : 'banding';
-        let itemsForAnalisa = items;
-        if (tokoDisebut.length > 0) {
-          itemsForAnalisa = items.filter(function(item) {
-            return tokoDisebut.some(function(t) { return item.harga[t.kode].ecer > 0; });
-          });
-        }
-        
-        if (itemsForAnalisa.length === 0) {
-          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid di toko yang diminta.');
-          return;
-        }
-        
-        const multipleItems = itemsForAnalisa.map(function(item) {
+        if (!hasilCari.hasil || hasilCari.hasil.length === 0) { await kirimWA(sender, '❌ Tidak ditemukan: _' + keyword + '_'); return; }
+        if (hasilCari.hasil.length === 1) { await kirimWA(sender, formatAnalisaBandingHargaToko(hasilCari.hasil[0], tokoDisebut, sender)); return; }
+        // Multiple
+        let resp = '📊 *PERBANDINGAN HARGA*\n' + GARIS_TEBAL + '\n🔍 _' + keyword + '_\n📦 ' + hasilCari.hasil.length + ' barang\n' + GARIS_TEBAL + '\n\n';
+        hasilCari.hasil.slice(0, 5).forEach(function(item, i) {
           const a = analisaPerbandinganHargaToko(item, tokoDisebut);
-          return {
-            item: item, analisa: a,
-            minHarga: a.analisa.ecer ? a.analisa.ecer.termurah.harga : 999999999,
-            maxHarga: a.analisa.ecer ? a.analisa.ecer.termahal.harga : 0,
-          };
-        }).filter(function(x) { return x.analisa.analisa.ecer !== null; });
-        
-        if (multipleItems.length === 0) {
-          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid');
-          return;
-        }
-        
-        if (jenisAnalisa === 'termurah') multipleItems.sort(function(a, b) { return a.minHarga - b.minHarga; });
-        else if (jenisAnalisa === 'termahal') multipleItems.sort(function(a, b) { return b.maxHarga - a.maxHarga; });
-        
-        const judul = jenisAnalisa === 'termurah' ? '🟢 TOP TERMURAH' : jenisAnalisa === 'termahal' ? '🔴 TOP TERMAHAL' : '📊 PERBANDINGAN HARGA';
-        const namaUser = getNama(sender);
-        const suffix = '\n\n' + (namaUser ? '_Semoga membantu, *' + namaUser + '*!_ 😊' : '_Semoga membantu!_ 😊');
-        
-        let respMulti = judul + '\n' + GARIS_TEBAL + '\n';
-        respMulti += '🔍 Pencarian: _"' + keyword + '"_\n';
-        if (tokoDisebut.length > 0) respMulti += '🎯 Toko: ' + tokoDisebut.map(function(t) { return t.nama; }).join(', ') + '\n';
-        respMulti += '📦 Ditemukan: ' + multipleItems.length + ' barang\n' + GARIS_TEBAL + '\n\n';
-        
-        const top = multipleItems.slice(0, 5);
-        top.forEach(function(x, i) {
-          const item = x.item;
-          const a = x.analisa.analisa.ecer;
-          respMulti += '*' + (i + 1) + '. ' + item.nama + '*\n';
-          respMulti += '   🔖 ' + item.kode + ' | ' + item.satuan + '\n';
-          if (a.semuaSama) {
-            respMulti += '   💰 ' + fRp(a.termurah.harga) + ' _(sama di semua)_\n';
-          } else {
-            respMulti += '   🟢 Termurah: ' + fRp(a.termurah.harga) + ' _(di ' + a.termurah.toko.nama + ')_\n';
-            respMulti += '   🔴 Termahal: ' + fRp(a.termahal.harga) + ' _(di ' + a.termahal.toko.nama + ')_\n';
-            respMulti += '   💸 Selisih: ' + fRp(a.selisih) + ' (' + a.persenSelisih + '%)\n';
+          resp += '*' + (i+1) + '. ' + item.nama + '* (' + item.kode + ')\n';
+          if (a.analisa.ecer) {
+            if (a.analisa.ecer.semuaSama) resp += '   💰 ' + fRp(a.analisa.ecer.termurah.harga) + ' _(sama)_\n';
+            else resp += '   🟢 ' + fRp(a.analisa.ecer.termurah.harga) + ' (' + a.analisa.ecer.termurah.toko.nama + ')\n   🔴 ' + fRp(a.analisa.ecer.termahal.harga) + ' (' + a.analisa.ecer.termahal.toko.nama + ')\n   💸 Selisih: ' + fRp(a.analisa.ecer.selisih) + '\n';
           }
-          respMulti += '\n';
+          resp += '\n';
         });
-        
-        if (multipleItems.length > 5) respMulti += '_+' + (multipleItems.length - 5) + ' barang lainnya_\n\n';
-        respMulti += GARIS_TEBAL + '\n💡 Ketik kode barang untuk detail lengkap';
-        await kirimWA(sender, respMulti + suffix);
+        await kirimWA(sender, resp);
         return;
-        
-      } catch (e) {
-        log.error('BANDING', 'Error: ' + e.message);
-        await kirimWA(sender, '⚠️ Terjadi kesalahan. Coba lagi atau ketik *menu*.');
-        return;
-      }
+      } catch (e) { log.error('BANDING', e.message); await kirimWA(sender, '⚠️ Error. Ketik *menu*.'); return; }
     }
 
-    // ════════════════════════════════════════════════════════════
-    //   AI CHAT UMUM
-    // ════════════════════════════════════════════════════════════
-    if (!_lagiInput && isMember(sender) && isPertanyaanUmum(low) && 
-        !isPertanyaanBarang(low) && !isPertanyaanBanding(low) && msg.length >= 5) {
-      log.info('AI_UMUM', sender + ' tanya umum: ' + msg.substring(0, 80));
-      await kirimWA(sender, '🤖 _Sedang menjawab..._');
-      try {
-        const jawaban = await aiChatUmum(msg, sender);
-        if (jawaban && jawaban.length > 10) {
-          await kirimWA(sender, '🤖 ' + jawaban);
-          return;
-        }
-      } catch (e) { log.error('AI_UMUM', 'Exception: ' + e.message); }
-      const namaU = getNama(sender);
-      const sapaanU = namaU ? '*' + namaU + '*' : 'kakak';
-      await kirimWA(sender, '🤖 Hai ' + sapaanU + '! 👋\n\nSaya *Bot Perabot* asisten 5 toko perabot.\n\n💡 *Saya bisa bantu:*\n• 🔍 Cari harga & stok barang\n• 📊 Bandingkan harga antar toko\n• 📝 Input laporan penjualan\n\nKetik *menu* untuk lihat semua fitur!');
+    // ── AI CHAT UMUM ──
+    if (!_lagiInput && isMember(sender) && isPertanyaanUmum(low) && !isPertanyaanBarang(low) && !isPertanyaanBanding(low) && msg.length >= 5) {
+      await kirimWA(sender, '🤖 _Menjawab..._');
+      try { const j = await aiChatUmum(msg, sender); if (j && j.length > 10) { await kirimWA(sender, '🤖 ' + j); return; } } catch (e) {}
+      await kirimWA(sender, '🤖 Hai! Saya Bot Perabot 5 toko.\n\n💡 Ketik *menu* untuk fitur lengkap!');
       return;
     }
 
     // ── ADMIN MODE INPUT ──
     if (isAdmin(sender) && s.adminAksi) {
-      const aksi = s.adminAksi;
-      updateSesi(sender, { adminAksi: null });
-      if (aksi === 'daftar')      return await handleAdmin(sender, 'daftar ' + msg, 'daftar ' + low);
-      if (aksi === 'hapus')       return await handleAdmin(sender, 'hapus ' + msg, 'hapus ' + low);
-      if (aksi === 'namakontak')  return await handleAdmin(sender, 'namakontak ' + msg, 'namakontak ' + low);
+      const aksi = s.adminAksi; updateSesi(sender, { adminAksi: null });
+      if (aksi === 'daftar') return await handleAdmin(sender, 'daftar ' + msg, 'daftar ' + low);
+      if (aksi === 'hapus') return await handleAdmin(sender, 'hapus ' + msg, 'hapus ' + low);
+      if (aksi === 'namakontak') return await handleAdmin(sender, 'namakontak ' + msg, 'namakontak ' + low);
       if (aksi === 'hapuskontak') return await handleAdmin(sender, 'hapuskontak ' + msg, 'hapuskontak ' + low);
     }
 
     // ── MENU ADMIN ──
     if (s.mode === 'admin_menu') {
       const aksi = parsePilihanAdmin(low);
-      if (aksi === 'listmember' || aksi === 'listkontak' || aksi === 'reload' || aksi === 'info') {
-        resetSesi(sender);
-        return await handleAdmin(sender, aksi, aksi);
-      }
-      if (aksi === 'daftar')      { updateSesi(sender, { adminAksi: 'daftar', mode: null });      await kirimWA(sender, '➕ *Tambah Member*\n' + GARIS_TEBAL + '\n\nKetik nomor HP:\n_6281234567890_\n\n🔙 Ketik *batal* untuk membatalkan'); return; }
-      if (aksi === 'hapus')       { updateSesi(sender, { adminAksi: 'hapus', mode: null });       await kirimWA(sender, '➖ *Hapus Member*\n' + GARIS_TEBAL + '\n\nKetik nomor HP:\n_6281234567890_\n\n🔙 Ketik *batal* untuk membatalkan'); return; }
-      if (aksi === 'namakontak')  { updateSesi(sender, { adminAksi: 'namakontak', mode: null });  await kirimWA(sender, '✏️ *Set Nama*\n' + GARIS_TEBAL + '\n\nFormat: nomor nama\n_6281234567890 Pak Budi_\n\n🔙 Ketik *batal* untuk membatalkan'); return; }
-      if (aksi === 'hapuskontak') { updateSesi(sender, { adminAksi: 'hapuskontak', mode: null }); await kirimWA(sender, '🗑️ *Hapus Kontak*\n' + GARIS_TEBAL + '\n\nKetik nomor HP\n\n🔙 Ketik *batal* untuk membatalkan'); return; }
-      await kirimWA(sender, getMenuAdmin());
-      return;
+      if (aksi === 'listmember' || aksi === 'listkontak' || aksi === 'reload' || aksi === 'info') { resetSesi(sender); return await handleAdmin(sender, aksi, aksi); }
+      if (aksi === 'daftar') { updateSesi(sender, { adminAksi:'daftar', mode:null }); await kirimWA(sender, '➕ Ketik nomor HP:\n_6281234567890_\n\n🔙 *batal*'); return; }
+      if (aksi === 'hapus') { updateSesi(sender, { adminAksi:'hapus', mode:null }); await kirimWA(sender, '➖ Ketik nomor HP:\n\n🔙 *batal*'); return; }
+      if (aksi === 'namakontak') { updateSesi(sender, { adminAksi:'namakontak', mode:null }); await kirimWA(sender, '✏️ Format: nomor nama\n_628xxx Pak Budi_\n\n🔙 *batal*'); return; }
+      if (aksi === 'hapuskontak') { updateSesi(sender, { adminAksi:'hapuskontak', mode:null }); await kirimWA(sender, '🗑️ Ketik nomor HP\n\n🔙 *batal*'); return; }
+      await kirimWA(sender, getMenuAdmin()); return;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //   LAPORAN: Pilih menu (RESET DULU sebelum set mode baru!)
-    // ════════════════════════════════════════════════════════════
+    // ── PILIH MENU ──
     if (!s.menu && !s.mode) {
       const pilihan = parsePilihanMenu(low);
-      if (pilihan === 1 || pilihan === 2) { 
-        resetSesi(sender);
-        updateSesi(sender, { menu: pilihan }); 
-        await kirimWA(sender, getMenuPilihToko(pilihan)); 
-        return; 
-      }
-      if (pilihan === 3) { 
-        resetSesi(sender);
-        updateSesi(sender, { menu: 3 }); 
-        await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); 
-        return; 
-      }
+      if (pilihan === 1 || pilihan === 2) { resetSesi(sender); updateSesi(sender, { menu: pilihan }); await kirimWA(sender, getMenuPilihToko(pilihan)); return; }
+      if (pilihan === 3) { resetSesi(sender); updateSesi(sender, { menu: 3 }); await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); return; }
       if (pilihan === 4) {
-        if (!isMember(sender)) { 
-          await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member.\nHubungi admin untuk mendaftar.'); 
-          return; 
-        }
-        resetSesi(sender);
-        updateSesi(sender, { mode: 'cari', tokoKode: null });
-        await kirimWA(sender, getMenuPilihToko('cari'));
-        return;
+        if (!isMember(sender)) { await kirimWA(sender, '🚫 Hanya untuk member.'); return; }
+        resetSesi(sender); updateSesi(sender, { mode:'cari', tokoKode:null }); await kirimWA(sender, getMenuPilihToko('cari')); return;
       }
       if (pilihan === 9) {
-        if (!isAdmin(sender)) { await kirimWA(sender, '🚫 Menu khusus admin.'); return; }
-        resetSesi(sender);
-        updateSesi(sender, { mode: 'admin_menu' });
-        await kirimWA(sender, getMenuAdmin());
-        return;
+        if (!isAdmin(sender)) { await kirimWA(sender, '🚫 Khusus admin.'); return; }
+        resetSesi(sender); updateSesi(sender, { mode:'admin_menu' }); await kirimWA(sender, getMenuAdmin()); return;
       }
-      await kirimWA(sender, '🤔 Maaf, saya tidak mengerti.\n\nKetik *menu* untuk lihat pilihan.');
+      await kirimWA(sender, '🤔 Maaf, tidak mengerti.\n\nKetik *menu* untuk pilihan.');
       return;
     }
 
-    // ── LAPORAN: Pilih toko ──
+    // ── PILIH TOKO ──
     if (s.menu !== 3 && !s.toko) {
       const toko = parsePilihanToko(low);
       if (toko) { updateSesi(sender, { toko: toko.kode }); await kirimWA(sender, getMenuPilihHari(toko.nama)); return; }
-      await kirimWA(sender, getMenuPilihToko(s.menu));
-      return;
+      await kirimWA(sender, getMenuPilihToko(s.menu)); return;
     }
 
-    // ── LAPORAN: Pilih hari ──
+    // ── PILIH HARI ──
     if (s.kemarin === undefined || s.kemarin === null) {
       const kem = parsePilihanHari(low);
-      if (kem === null) {
-        const nm = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
-        await kirimWA(sender, getMenuPilihHari(nm));
-        return;
-      }
+      if (kem === null) { const nm = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko]; await kirimWA(sender, getMenuPilihHari(nm)); return; }
       updateSesi(sender, { kemarin: kem });
       const nm = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
       
+      // ★★★ MENU 1 → LANGSUNG MASUK SCAN FOTO MODE ★★★
       if (s.menu === 1) {
         const t = getTanggal(kem);
         const kk = kem ? ' _(kemarin)_' : '';
         let intro = '╭━━━━━━━━━━━━━━━━━╮\n│  ✅ *MULAI INPUT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
         intro += '🏦 ' + nm + '\n📅 ' + t + kk + '\n\n';
-        intro += '📸 *Kirim FOTO* untuk dibaca AI\n   _atau jawab pertanyaan di bawah_\n\n';
+        intro += '📸 *Kirim foto satu-per-satu*\n   Bot akan scan otomatis\n\n';
+        intro += '⌨️ Atau ketik angka manual\n\n';
         intro += '━━━━━━━━━━━━━━━━━━';
         await kirimWA(sender, intro);
         await tunggu(800);
-        updateSesi(sender, { wizardActive: true, wizardData: {} });
-        const nextField = wizardGetNextField(s.toko, {});
-        if (nextField) await kirimWA(sender, wizardTanyaField(s.toko, nextField, nm, {}));
+        
+        // Mulai scan mode
+        updateSesi(sender, { scanActive: true, scanData: {}, scanStepIdx: 0 });
+        await kirimWA(sender, msgMintaFoto(s.toko, 0, nm, {}));
         return;
       }
+      
       if (s.menu === 2) { await kirimWA(sender, getMenuSiapInputHarga(nm, kem)); return; }
       if (s.menu === 3) { await kirimWA(sender, getMenuSiapInputMarket(nm, kem)); return; }
       return;
     }
 
-    // ── LAPORAN: Input data ──
+    // ── INPUT DATA (menu 2 & 3 — foto/teks biasa) ──
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
 
-    if (s.menu === 1 && s.wizardActive) {
-      const dataWizard = s.wizardData || {};
-      if (low === 'review') { await kirimWA(sender, wizardReview(s.toko, dataWizard, namaToko)); return; }
-      if (low === 'selesai' || low === 'finish' || low === 'done') {
-        const fields = FIELD_LAPORAN[s.toko];
-        fields.forEach(function(f) { if (dataWizard[f.key] === undefined) dataWizard[f.key] = 0; });
-        const text = wizardToText(dataWizard, s.toko);
-        laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
-        if (laporan) {
-          await kirimWA(sender, laporan);
-          resetSesi(sender);
-          await tunggu(1500);
-          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-        }
-        return;
-      }
-      if (low === 'lanjut' || low === 'next' || low === 'continue') {
-        const nextField = wizardGetNextField(s.toko, dataWizard);
-        if (nextField) await kirimWA(sender, wizardTanyaField(s.toko, nextField, namaToko, dataWizard));
-        else {
-          const text = wizardToText(dataWizard, s.toko);
-          laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
-          if (laporan) {
-            await kirimWA(sender, laporan);
-            resetSesi(sender);
-            await tunggu(1500);
-            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-          }
-        }
-        return;
-      }
-      const currentField = wizardGetNextField(s.toko, dataWizard);
-      if (!currentField) {
-        const text = wizardToText(dataWizard, s.toko);
-        laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
-        if (laporan) {
-          await kirimWA(sender, laporan);
-          resetSesi(sender);
-          await tunggu(1500);
-          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-        }
-        return;
-      }
-      const f = currentField.field;
-      if (low === 'skip' || low === 'lewati') {
-        dataWizard[f.key] = 0;
-        updateSesi(sender, { wizardData: dataWizard });
-        const next = wizardGetNextField(s.toko, dataWizard);
-        if (next) {
-          await tunggu(300);
-          await kirimWA(sender, '⏭️ _Dilewati (diisi 0)_\n\n' + wizardTanyaField(s.toko, next, namaToko, dataWizard));
-        } else {
-          const text = wizardToText(dataWizard, s.toko);
-          laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
-          if (laporan) {
-            await kirimWA(sender, laporan);
-            resetSesi(sender);
-            await tunggu(1500);
-            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-          }
-        }
-        return;
-      }
-      let nominal = 0;
-      if (f.key === 'total' && f.auto && (low === 'ok' || low === 'ya' || low === 'yes' || low === 'y' || low === 'otomatis' || low === 'auto')) {
-        let totalCalc = 0;
-        Object.keys(dataWizard).forEach(function(k) {
-          if (k.startsWith('k') && k.length <= 2 && !k.startsWith('kr')) {
-            totalCalc += (parseInt(dataWizard[k]) || 0);
-          }
-        });
-        nominal = totalCalc;
-      } else if (msg === '-' || low === 'kosong' || low === 'null') {
-        nominal = 0;
-      } else {
-        const angka = msg.replace(/[^0-9]/g, '');
-        if (!angka) {
-          await kirimWA(sender, '⚠️ Format salah!\n\nKetik angka saja (contoh: _29812000_)\natau *-* untuk kosong.');
-          return;
-        }
-        nominal = parseInt(angka);
-      }
-      dataWizard[f.key] = nominal;
-      updateSesi(sender, { wizardData: dataWizard });
-      let labelKonfirmasi = f.label;
-      if (s.toko === 'cp' && KASIR_CP_DEFAULT[f.key]) {
-        labelKonfirmasi = f.label + ' (' + KASIR_CP_DEFAULT[f.key] + ')';
-      }
-      const formatNominal = nominal === 0 ? 'Rp. -' : 'Rp. ' + nominal.toLocaleString('id-ID');
-      const next = wizardGetNextField(s.toko, dataWizard);
-      if (next) {
-        await tunggu(300);
-        await kirimWA(sender, '✅ _' + labelKonfirmasi + ': ' + formatNominal + ' disimpan_\n\n' + wizardTanyaField(s.toko, next, namaToko, dataWizard));
-      } else {
-        await kirimWA(sender, '✅ _' + labelKonfirmasi + ': ' + formatNominal + ' disimpan_\n\n🎉 *Semua data sudah diisi!*\n⏳ _Sedang generate laporan..._');
-        await tunggu(800);
-        const text = wizardToText(dataWizard, s.toko);
-        laporan = genLapPenjualan(text, namaToko, s.kemarin, s.toko);
-        if (laporan) {
-          await kirimWA(sender, laporan);
-          resetSesi(sender);
-          await tunggu(1500);
-          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-        }
-      }
-      return;
-    }
-
     if (image && image.length > 0) {
-      await kirimWA(sender, '📸 Foto diterima, sedang dianalisa AI...');
+      await kirimWA(sender, '📸 _Dianalisa AI..._');
       try {
         const prompt = buatPromptAI(s.menu, namaToko, getTanggal(s.kemarin), s.toko);
         laporan = await analisaGambar(image, prompt);
-      } catch (e) {
-        log.error('GEMINI', 'Gagal', e.message);
-        await kirimWA(sender, '❌ Gagal baca foto. Coba kirim ulang atau ketik manual.');
-        return;
-      }
+      } catch (e) { log.error('GEMINI', e.message); await kirimWA(sender, '❌ Gagal baca foto.'); return; }
     } else if (msg) {
-      if (s.menu === 1) laporan = genLapPenjualan(msg, namaToko, s.kemarin, s.toko);
       if (s.menu === 2) laporan = genLapHarga(msg, namaToko, s.kemarin);
       if (s.menu === 3) laporan = genLapMarket(msg, s.kemarin);
     } else return;
@@ -2403,30 +1992,27 @@ app.post('/webhook', async function(req, res) {
 
   } catch (err) {
     log.error('WEBHOOK', 'Unhandled', err.message);
-    try {
-      const sender = req.body ? (req.body.sender || req.body.from || '') : '';
-      if (sender) await kirimWA(sender, '⚠️ Terjadi kesalahan. Ketik *menu* untuk mulai ulang.');
-    } catch (e) {}
+    try { const sender = req.body ? (req.body.sender || req.body.from || '') : ''; if (sender) await kirimWA(sender, '⚠️ Error. Ketik *menu*.'); } catch (e) {}
   }
 });
 
 // ════════════════════════════════════════════════════════════════
-//   20. START SERVER
+//   22. START
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v3.12');
-  console.log('  (Fix Sesi Reset + Multi-AI)');
+  console.log('  ' + CONFIG.appName + ' v3.13');
+  console.log('  (Scan Foto Multi-Step + All Features)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  Admin     : ' + CONFIG.adminNumber);
   console.log('  Items     : ' + DATA_BARANG.length);
   console.log('  Members   : ' + MEMBERS.length + '/' + CONFIG.maxMember);
   console.log('  AI Stack  :');
-  if (CONFIG.groqKey)       console.log('    ✅ GROQ (primary)');
+  if (CONFIG.groqKey)       console.log('    ✅ GROQ');
   if (CONFIG.geminiKey)     console.log('    ✅ GEMINI (' + geminiKeys().length + ' keys)');
-  if (CONFIG.openrouterKey) console.log('    ✅ OPENROUTER (backup)');
+  if (CONFIG.openrouterKey) console.log('    ✅ OPENROUTER');
   console.log('=====================================\n');
 });
 
