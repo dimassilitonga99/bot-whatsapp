@@ -605,49 +605,49 @@ function formatBarangUntukAI(items) {
 
 // AI Chat tentang barang
 async function aiChatBarang(pertanyaan, sender) {
-  try {
-    // Cari barang relevan untuk context
-    let relevantItems = cariRelevan(pertanyaan, 50);
-    
-    // Kalau gak ada hasil relevan, ambil 50 barang random sebagai context
-    if (relevantItems.length === 0) {
-      log.warn('AI_CHAT', 'Tidak ada barang relevan, pakai context kosong');
-      relevantItems = [];
-    }
-    
-    const context = relevantItems.length > 0 
-      ? formatBarangUntukAI(relevantItems)
-      : '(Tidak ada barang yang cocok dengan kata kunci di database)';
-    
-    const nama = getNama(sender);
-    const sapaan = nama ? nama : 'kakak';
-    const totalBarang = DATA_BARANG.length;
-    
-    const prompt = 'Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.\n\n' +
-      'Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM (TDM), Perabot Mama Oesapa (Oesapa), Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).\n' +
-      'Total database ada ' + totalBarang + ' barang.\n\n' +
-      'DATA BARANG YANG RELEVAN DENGAN PERTANYAAN (' + relevantItems.length + ' item):\n' +
-      context + '\n\n' +
-      'PERTANYAAN USER (' + sapaan + '):\n' +
-      '"' + pertanyaan + '"\n\n' +
-      'ATURAN MENJAWAB:\n' +
-      '1. Jawab ramah dan natural, panggil user dengan "' + sapaan + '"\n' +
-      '2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)\n' +
-      '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
-      '4. Kalau bandingkan toko, gunakan format yang mudah dibaca\n' +
-      '5. Kalau stok kosong, sebutkan dengan jelas ⚠️\n' +
-      '6. Pakai *bold* untuk teks penting (WhatsApp format)\n' +
-      '7. Maksimal 1500 karakter\n' +
-      '8. PENTING: Kalau di data tidak ada barang yang cocok, JANGAN bilang "tidak menemukan informasi". Sebagai gantinya:\n' +
-      '   - Tampilkan barang yang MIRIP dengan kata kunci dari data di atas\n' +
-      '   - Beri saran kata kunci alternatif\n' +
-      '   - Tawarkan untuk mencari dengan kata lain\n' +
-      '9. Selalu berikan jawaban yang berguna, walaupun data terbatas\n' +
-      '10. Akhiri dengan tawaran bantuan ("Ada yang ingin ditanyakan lagi?" atau "Mau dicarikan yang lain?")\n\n' +
-      'Jawab pertanyaan user sekarang dengan ramah dan helpful:';
+  // Build prompt di luar try/catch supaya bisa diakses di retry
+  let relevantItems = cariRelevan(pertanyaan, 50);
+  
+  if (relevantItems.length === 0) {
+    log.warn('AI_CHAT', 'Tidak ada barang relevan, pakai context kosong');
+    relevantItems = [];
+  }
+  
+  const context = relevantItems.length > 0 
+    ? formatBarangUntukAI(relevantItems)
+    : '(Tidak ada barang yang cocok dengan kata kunci di database)';
+  
+  const nama = getNama(sender);
+  const sapaan = nama ? nama : 'kakak';
+  const totalBarang = DATA_BARANG.length;
+  
+  const prompt = 'Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.\n\n' +
+    'Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM (TDM), Perabot Mama Oesapa (Oesapa), Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).\n' +
+    'Total database ada ' + totalBarang + ' barang.\n\n' +
+    'DATA BARANG YANG RELEVAN DENGAN PERTANYAAN (' + relevantItems.length + ' item):\n' +
+    context + '\n\n' +
+    'PERTANYAAN USER (' + sapaan + '):\n' +
+    '"' + pertanyaan + '"\n\n' +
+    'ATURAN MENJAWAB:\n' +
+    '1. Jawab ramah dan natural, panggil user dengan "' + sapaan + '"\n' +
+    '2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)\n' +
+    '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
+    '4. Kalau bandingkan toko, gunakan format yang mudah dibaca\n' +
+    '5. Kalau stok kosong, sebutkan dengan jelas ⚠️\n' +
+    '6. Pakai *bold* untuk teks penting (WhatsApp format)\n' +
+    '7. Maksimal 1500 karakter\n' +
+    '8. PENTING: Kalau di data tidak ada barang yang cocok, JANGAN bilang "tidak menemukan informasi". Sebagai gantinya:\n' +
+    '   - Tampilkan barang yang MIRIP dengan kata kunci dari data di atas\n' +
+    '   - Beri saran kata kunci alternatif\n' +
+    '   - Tawarkan untuk mencari dengan kata lain\n' +
+    '9. Selalu berikan jawaban yang berguna, walaupun data terbatas\n' +
+    '10. Akhiri dengan tawaran bantuan ("Ada yang ingin ditanyakan lagi?" atau "Mau dicarikan yang lain?")\n\n' +
+    'Jawab pertanyaan user sekarang dengan ramah dan helpful:';
 
-    log.info('AI_CHAT', 'Kirim ke Gemini, context: ' + relevantItems.length + ' items');
-    
+  log.info('AI_CHAT', 'Kirim ke Gemini, context: ' + relevantItems.length + ' items');
+  
+  // Coba dengan key utama
+  try {
     const resp = await axios.post(geminiUrl(), {
       contents: [{ parts: [{ text: prompt }] }],
     }, { timeout: 30000 });
@@ -655,30 +655,42 @@ async function aiChatBarang(pertanyaan, sender) {
     const jawaban = resp.data.candidates[0].content.parts[0].text || '';
     log.info('AI_CHAT', 'Jawaban length: ' + jawaban.length);
     
-    if (!jawaban || jawaban.trim().length < 10) {
-      return null;
-    }
-    
+    if (!jawaban || jawaban.trim().length < 10) return null;
     return jawaban.trim();
     
-    } catch (err) {
-    log.error('AI_CHAT', 'Gagal: ' + err.message);
+  } catch (err) {
+    log.error('AI_CHAT', 'Gagal key #' + (currentGeminiKeyIndex + 1) + ': ' + err.message);
+    
     if (err.response) {
       log.error('AI_CHAT', 'Response: ' + JSON.stringify(err.response.data).substring(0, 200));
-      // Kalau error 429 (quota), rotate ke key berikutnya
+      
+      // Kalau error 429 (quota), rotate ke key berikutnya & retry
       if (err.response.status === 429) {
-        rotateGeminiKey();
-        log.warn('AI_CHAT', 'Quota habis, rotate API key & retry...');
-        // Retry sekali dengan key baru
-        try {
-          const resp2 = await axios.post(geminiUrl(), {
-            contents: [{ parts: [{ text: prompt }] }],
-          }, { timeout: 30000 });
-          const jawaban2 = resp2.data.candidates[0].content.parts[0].text || '';
-          if (jawaban2 && jawaban2.trim().length >= 10) return jawaban2.trim();
-        } catch (err2) {
-          log.error('AI_CHAT', 'Retry juga gagal: ' + err2.message);
+        const keys = geminiKeys();
+        const maxRotate = keys.length - 1; // Maksimal coba semua key sisa
+        
+        for (let attempt = 0; attempt < maxRotate; attempt++) {
+          rotateGeminiKey();
+          log.warn('AI_CHAT', 'Quota habis, retry dengan key #' + (currentGeminiKeyIndex + 1));
+          
+          try {
+            const resp2 = await axios.post(geminiUrl(), {
+              contents: [{ parts: [{ text: prompt }] }],
+            }, { timeout: 30000 });
+            const jawaban2 = resp2.data.candidates[0].content.parts[0].text || '';
+            
+            if (jawaban2 && jawaban2.trim().length >= 10) {
+              log.info('AI_CHAT', 'Berhasil retry dengan key #' + (currentGeminiKeyIndex + 1));
+              return jawaban2.trim();
+            }
+          } catch (err2) {
+            log.error('AI_CHAT', 'Retry key #' + (currentGeminiKeyIndex + 1) + ' gagal: ' + err2.message);
+            // Lanjut ke key berikutnya
+            if (err2.response && err2.response.status !== 429) break;
+          }
         }
+        
+        log.error('AI_CHAT', 'Semua API key quota habis!');
       }
     }
     return null;
