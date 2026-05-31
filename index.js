@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 3.11 - Multi-AI + Banding + Konfirmasi Pindah Toko
+//   Versi 3.12 - Fix Sesi Reset + Multi-AI + Konfirmasi Toko
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -163,7 +163,7 @@ const DEFAULT_KONTAK = {
   '6285829278962': 'Admin'
 };
 
-const ADMIN_COMMANDS = ['daftar','hapus','listmember','namakontak','hapuskontak','listkontak','reload','info'];
+const ADMIN_COMMANDS = ['daftar','hapus','listmember','namakontak','hapuskontak','listkontak','reload','info','resetall'];
 
 // ════════════════════════════════════════════════════════════════
 //   3. LOGGER & UTILS
@@ -262,8 +262,21 @@ function hapusKontak(nomor) {
 }
 
 const TIMEOUT_MS = CONFIG.sesiTimeoutMenit * 60 * 1000;
-function getSesi(nomor) { if (!SESI[nomor]) SESI[nomor] = {}; SESI[nomor]._lastActive = Date.now(); return SESI[nomor]; }
-function resetSesi(nomor) { SESI[nomor] = { _lastActive: Date.now() }; saveJSON(CONFIG.paths.sesi, SESI); }
+
+function getSesi(nomor) { 
+  if (!SESI[nomor]) SESI[nomor] = {}; 
+  SESI[nomor]._lastActive = Date.now(); 
+  return SESI[nomor]; 
+}
+
+// ★★★ RESET SESI TOTAL — DELETE & RECREATE ★★★
+function resetSesi(nomor) { 
+  delete SESI[nomor];
+  SESI[nomor] = { _lastActive: Date.now() };
+  saveJSON(CONFIG.paths.sesi, SESI);
+  log.info('SESI', 'Reset TOTAL untuk ' + nomor);
+}
+
 function updateSesi(nomor, data) {
   if (!SESI[nomor]) SESI[nomor] = {};
   Object.assign(SESI[nomor], data, { _lastActive: Date.now() });
@@ -462,7 +475,7 @@ function updateStok(kode, tokoKode, jumlah) {
 
 loadExcel();
 // ════════════════════════════════════════════════════════════════
-//   6. ★★★ ANALISA PERBANDINGAN HARGA ★★★
+//   6. ANALISA PERBANDINGAN HARGA
 // ════════════════════════════════════════════════════════════════
 
 function analisaPerbandinganHarga(item) {
@@ -604,7 +617,7 @@ function cariBarangPrioritas(keyword) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   7. ★★★ HELPER DETEKSI TOKO & KONFIRMASI ★★★
+//   7. HELPER DETEKSI TOKO & KONFIRMASI
 // ════════════════════════════════════════════════════════════════
 
 function deteksiTokoDariTeks(low) {
@@ -704,7 +717,7 @@ async function kirimWA(target, message, retry) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   9. MULTI-AI PROVIDER SYSTEM
+//   9. MULTI-AI PROVIDER
 // ════════════════════════════════════════════════════════════════
 
 let currentGeminiKeyIndex = 0;
@@ -907,8 +920,7 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
   if (tokoAktif) {
     const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
     if (tokoObj) {
-      filterInfo = '\n⚠️ KONTEKS PENTING: User sedang dalam MODE CARI di toko *' + tokoObj.nama + '*.\n' +
-                   'JAWAB HANYA UNTUK TOKO ' + tokoObj.nama.toUpperCase() + ' SAJA! JANGAN tampilkan data toko lain.\n';
+      filterInfo = '\n⚠️ KONTEKS: User di MODE CARI di *' + tokoObj.nama + '*. JAWAB HANYA UNTUK TOKO INI!\n';
     }
   } else if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
     filterInfo = '\nUSER MENANYAKAN TOKO SPESIFIK: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + 
@@ -920,7 +932,7 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
     filterInfo + '\n' +
     'DATA RELEVAN (' + relevantItems.length + ' item):\n' + context + '\n\n' +
     'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
-    'ATURAN:\n1. Ramah, panggil "' + sapaan + '"\n2. Pakai emoji\n3. Format harga: Rp 1.000.000\n4. *bold* untuk penting\n5. Max 1500 char\n6. Patuhi konteks toko!\n7. Akhiri dengan tawaran bantuan\n\nJawab:';
+    'ATURAN:\n1. Ramah, panggil "' + sapaan + '"\n2. Pakai emoji\n3. Format harga: Rp 1.000.000\n4. *bold* untuk penting\n5. Max 1500 char\n6. Patuhi konteks toko!\n7. Akhiri tawaran bantuan\n\nJawab:';
 
   const result = await chatAI(prompt);
   if (result && result.jawaban) {
@@ -1133,7 +1145,7 @@ function balasTerimakasih(sender) {
 }
 
 function isAdminCommand(low) {
-  if (['listmember','listkontak','reload','info'].indexOf(low) >= 0) return true;
+  if (['listmember','listkontak','reload','info','resetall'].indexOf(low) >= 0) return true;
   return ADMIN_COMMANDS.some(function(cmd) { return low.startsWith(cmd + ' '); });
 }
 
@@ -1717,6 +1729,12 @@ async function handleAdmin(sender, msg, low) {
     await kirimWA(sender, ok ? '✅ Excel reloaded! Total: ' + DATA_BARANG.length + ' item' : '❌ Gagal reload');
     return true;
   }
+  if (low === 'resetall') {
+    SESI = {};
+    saveJSON(CONFIG.paths.sesi, SESI);
+    await kirimWA(sender, '✅ *Semua sesi user direset!*\n\nSekarang semua user akan mulai dari menu utama.');
+    return true;
+  }
   if (low === 'info') {
     const up = Math.floor(process.uptime());
     const jam = Math.floor(up / 3600), mnt = Math.floor((up % 3600) / 60);
@@ -1725,11 +1743,12 @@ async function handleAdmin(sender, msg, low) {
     if (CONFIG.geminiKey) aiStatus += '\n  ✅ Gemini (' + geminiKeys().length + ' keys)';
     if (CONFIG.openrouterKey) aiStatus += '\n  ✅ OpenRouter';
     if (!aiStatus) aiStatus = '\n  ⚠️ Tidak ada AI provider';
-    await kirimWA(sender, 'ℹ️ Info Sistem\n------------------' +
+    await kirimWA(sender, 'ℹ️ Info Sistem v3.12\n------------------' +
       '\nUptime: ' + jam + 'j ' + mnt + 'm\nMember: ' + MEMBERS.length + '/' + CONFIG.maxMember +
       '\nData: ' + DATA_BARANG.length + ' item\nKontak: ' + Object.keys(KONTAK).length +
       '\nSesi: ' + Object.keys(SESI).length + '\nNode: ' + process.version +
-      '\n\n🤖 AI Providers:' + aiStatus);
+      '\n\n🤖 AI Providers:' + aiStatus +
+      '\n\n💡 Tip: ketik *resetall* untuk reset semua sesi user');
     return true;
   }
   return false;
@@ -1740,7 +1759,7 @@ async function handleAdmin(sender, msg, low) {
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v3.11', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
+  res.json({ status: 'ok', app: CONFIG.appName + ' v3.12', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
 });
 app.get('/reload', function(req, res) {
   const ok = loadExcel();
@@ -1748,14 +1767,20 @@ app.get('/reload', function(req, res) {
 });
 app.get('/resetsesi/:nomor', function(req, res) {
   resetSesi(req.params.nomor);
-  res.json({ ok: true });
+  res.json({ ok: true, msg: 'Sesi ' + req.params.nomor + ' direset' });
+});
+app.get('/resetall', function(req, res) {
+  SESI = {};
+  saveJSON(CONFIG.paths.sesi, SESI);
+  log.info('SESI', 'ALL SESSIONS CLEARED via endpoint');
+  res.json({ ok: true, message: 'Semua sesi direset' });
 });
 
 // ════════════════════════════════════════════════════════════════
 //   19. WEBHOOK UTAMA
 // ════════════════════════════════════════════════════════════════
 
-const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home'];
+const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home', 'keluar', 'exit', 'stop', 'reset'];
 
 app.post('/webhook', async function(req, res) {
   res.sendStatus(200);
@@ -1792,8 +1817,9 @@ app.post('/webhook', async function(req, res) {
     const _s = SESI[sender] || {};
     const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive;
 
-    // ── RESET ──
+    // ★★★ RESET — FORCE RESET TOTAL ★★★
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
+      log.info('RESET', 'User reset sesi: ' + sender + ' kata: ' + low);
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
       return;
@@ -1816,8 +1842,11 @@ app.post('/webhook', async function(req, res) {
 
     // ════════════════════════════════════════════════════════════
     //   MODE CARI (dengan konfirmasi pindah toko)
+    //   PENTING: HANYA aktif kalau s.mode === 'cari' BENAR-BENAR
     // ════════════════════════════════════════════════════════════
     if (s.mode === 'cari') {
+      log.info('MODE_CARI', 'Aktif - tokoKode: ' + (s.tokoKode || 'null'));
+      
       // ★ HANDLE KONFIRMASI PINDAH TOKO ★
       if (s.pendingPindahToko) {
         if (isKonfirmasiYa(low)) {
@@ -1837,7 +1866,7 @@ app.post('/webhook', async function(req, res) {
         }
         if (isKonfirmasiTidak(low)) {
           updateSesi(sender, { pendingPindahToko: null });
-          await kirimWA(sender, '👍 OK, tetap di *' + NAMA_TOKO[s.tokoKode] + '*\n\nKetik nama/kode barang untuk cari, atau ketik *batal* untuk menu utama.');
+          await kirimWA(sender, '👍 OK, tetap di *' + NAMA_TOKO[s.tokoKode] + '*\n\nKetik nama/kode barang, atau ketik *batal* untuk menu utama.');
           return;
         }
         await kirimWA(sender, '🤔 Saya tidak yakin maksud kamu.\n\n💬 Jawab dengan:\n   • *iya* / *ya* / *oke* → pindah toko\n   • *tidak* → tetap di sini\n   • *batal* → menu utama');
@@ -1874,7 +1903,7 @@ app.post('/webhook', async function(req, res) {
       
       if (!msg) return;
       
-      // ★ Cek apakah user sebut toko lain ★
+      // Cek apakah user sebut toko lain
       const tokoLainDisebut = deteksiTokoDariTeks(low);
       const tokoBerbeda = tokoLainDisebut.filter(function(t) { return t.kode !== s.tokoKode; });
       
@@ -1913,7 +1942,7 @@ app.post('/webhook', async function(req, res) {
     }
 
     // ════════════════════════════════════════════════════════════
-    //   AI CHAT BARANG (hanya kalau tidak di mode cari)
+    //   AI CHAT BARANG (TIDAK aktif kalau di mode cari)
     // ════════════════════════════════════════════════════════════
     if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
       log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
@@ -1973,7 +2002,7 @@ app.post('/webhook', async function(req, res) {
     }
 
     // ════════════════════════════════════════════════════════════
-    //   ANALISA BANDING HARGA (hanya kalau tidak di mode cari)
+    //   ANALISA BANDING HARGA
     // ════════════════════════════════════════════════════════════
     if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
       log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
@@ -2100,7 +2129,7 @@ app.post('/webhook', async function(req, res) {
     }
 
     // ════════════════════════════════════════════════════════════
-    //   AI CHAT UMUM (pertanyaan random/casual)
+    //   AI CHAT UMUM
     // ════════════════════════════════════════════════════════════
     if (!_lagiInput && isMember(sender) && isPertanyaanUmum(low) && 
         !isPertanyaanBarang(low) && !isPertanyaanBanding(low) && msg.length >= 5) {
@@ -2144,20 +2173,36 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── LAPORAN: Pilih menu ──
+    // ════════════════════════════════════════════════════════════
+    //   LAPORAN: Pilih menu (RESET DULU sebelum set mode baru!)
+    // ════════════════════════════════════════════════════════════
     if (!s.menu && !s.mode) {
       const pilihan = parsePilihanMenu(low);
-      if (pilihan === 1 || pilihan === 2) { updateSesi(sender, { menu: pilihan }); await kirimWA(sender, getMenuPilihToko(pilihan)); return; }
-      if (pilihan === 3) { updateSesi(sender, { menu: 3 }); await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); return; }
-      if (pilihan === 4) {
-        if (!isMember(sender)) { await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member.\nHubungi admin untuk mendaftar.'); return; }
+      if (pilihan === 1 || pilihan === 2) { 
         resetSesi(sender);
-        updateSesi(sender, { mode: 'cari' });
+        updateSesi(sender, { menu: pilihan }); 
+        await kirimWA(sender, getMenuPilihToko(pilihan)); 
+        return; 
+      }
+      if (pilihan === 3) { 
+        resetSesi(sender);
+        updateSesi(sender, { menu: 3 }); 
+        await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); 
+        return; 
+      }
+      if (pilihan === 4) {
+        if (!isMember(sender)) { 
+          await kirimWA(sender, '🚫 *Akses Ditolak*\n\nFitur ini hanya untuk member.\nHubungi admin untuk mendaftar.'); 
+          return; 
+        }
+        resetSesi(sender);
+        updateSesi(sender, { mode: 'cari', tokoKode: null });
         await kirimWA(sender, getMenuPilihToko('cari'));
         return;
       }
       if (pilihan === 9) {
         if (!isAdmin(sender)) { await kirimWA(sender, '🚫 Menu khusus admin.'); return; }
+        resetSesi(sender);
         updateSesi(sender, { mode: 'admin_menu' });
         await kirimWA(sender, getMenuAdmin());
         return;
@@ -2354,8 +2399,8 @@ app.post('/webhook', async function(req, res) {
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v3.11');
-  console.log('  (Multi-AI + Banding + Konfirmasi Toko)');
+  console.log('  ' + CONFIG.appName + ' v3.12');
+  console.log('  (Fix Sesi Reset + Multi-AI)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  Admin     : ' + CONFIG.adminNumber);
