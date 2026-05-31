@@ -25,6 +25,8 @@ const CONFIG = {
   appName:      'Bot Toko Perabot',
   fonnteToken:  process.env.FONNTE_TOKEN,
   geminiKey:    process.env.GEMINI_KEY,
+  geminiKey2:   process.env.GEMINI_KEY2 || '',
+  geminiKey3:   process.env.GEMINI_KEY3 || '',
   adminNumber:  process.env.ADMIN_NUMBER || '6285829278962',
   fonnteUrl:    'https://api.fonnte.com/send',
 
@@ -45,8 +47,26 @@ const CONFIG = {
   maxHasilCari:     20,
 };
 
+let currentGeminiKeyIndex = 0;
+const geminiKeys = function() {
+  const keys = [CONFIG.geminiKey];
+  if (CONFIG.geminiKey2) keys.push(CONFIG.geminiKey2);
+  if (CONFIG.geminiKey3) keys.push(CONFIG.geminiKey3);
+  return keys;
+};
+
 function geminiUrl() {
-  return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + CONFIG.geminiKey;
+  const keys = geminiKeys();
+  const key = keys[currentGeminiKeyIndex % keys.length];
+  return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key;
+}
+
+function rotateGeminiKey() {
+  const keys = geminiKeys();
+  if (keys.length > 1) {
+    currentGeminiKeyIndex = (currentGeminiKeyIndex + 1) % keys.length;
+    log.info('GEMINI', 'Rotate ke key #' + (currentGeminiKeyIndex + 1));
+  }
 }
 
 if (!CONFIG.fonnteToken || !CONFIG.geminiKey) {
@@ -641,10 +661,25 @@ async function aiChatBarang(pertanyaan, sender) {
     
     return jawaban.trim();
     
-  } catch (err) {
+    } catch (err) {
     log.error('AI_CHAT', 'Gagal: ' + err.message);
     if (err.response) {
       log.error('AI_CHAT', 'Response: ' + JSON.stringify(err.response.data).substring(0, 200));
+      // Kalau error 429 (quota), rotate ke key berikutnya
+      if (err.response.status === 429) {
+        rotateGeminiKey();
+        log.warn('AI_CHAT', 'Quota habis, rotate API key & retry...');
+        // Retry sekali dengan key baru
+        try {
+          const resp2 = await axios.post(geminiUrl(), {
+            contents: [{ parts: [{ text: prompt }] }],
+          }, { timeout: 30000 });
+          const jawaban2 = resp2.data.candidates[0].content.parts[0].text || '';
+          if (jawaban2 && jawaban2.trim().length >= 10) return jawaban2.trim();
+        } catch (err2) {
+          log.error('AI_CHAT', 'Retry juga gagal: ' + err2.message);
+        }
+      }
     }
     return null;
   }
