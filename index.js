@@ -499,6 +499,147 @@ async function analisaGambar(imageUrl, prompt) {
   return resp.data.candidates[0].content.parts[0].text || '';
 }
 
+// ════════════════════════════════════════════════════════════════
+//   ★★★ AI CHAT BARANG ★★★
+// ════════════════════════════════════════════════════════════════
+
+// Cari barang yang relevan dengan pertanyaan (untuk context AI)
+function cariRelevan(pertanyaan, maxResults) {
+  maxResults = maxResults || 30;
+  const q = pertanyaan.toUpperCase();
+  const qBersih = bersihkanTeks(q);
+  const words = qBersih.split(/\s+/).filter(function(w) { return w.length > 2; });
+  
+  if (words.length === 0) return DATA_BARANG.slice(0, maxResults);
+  
+  // Hitung skor relevan untuk tiap barang
+  const scored = [];
+  DATA_BARANG.forEach(function(item) {
+    let score = 0;
+    const namaBersih = bersihkanTeks(item.nama);
+    const merekBersih = bersihkanTeks(item.merek);
+    const jenisBersih = bersihkanTeks(item.jenis);
+    
+    words.forEach(function(w) {
+      if (namaBersih.indexOf(w) >= 0) score += 10;
+      if (merekBersih.indexOf(w) >= 0) score += 8;
+      if (jenisBersih.indexOf(w) >= 0) score += 6;
+      if (item.kode.indexOf(w) >= 0) score += 15;
+    });
+    
+    if (score > 0) scored.push({ item: item, score: score });
+  });
+  
+  scored.sort(function(a, b) { return b.score - a.score; });
+  return scored.slice(0, maxResults).map(function(s) { return s.item; });
+}
+
+// Format data barang jadi context untuk AI
+function formatBarangUntukAI(items) {
+  let context = '';
+  items.forEach(function(d, i) {
+    context += (i + 1) + '. Kode: ' + d.kode + ' | Nama: ' + d.nama;
+    if (d.jenis) context += ' | Jenis: ' + d.jenis;
+    if (d.merek) context += ' | Merek: ' + d.merek;
+    context += ' | Satuan: ' + d.satuan + '\n';
+    
+    // Harga & stok semua toko
+    context += '   Harga & Stok per Toko:\n';
+    Object.keys(NAMA_TOKO).forEach(function(tk) {
+      const h = d.harga[tk];
+      const stok = h.stok > 0 ? h.stok : 'KOSONG';
+      context += '   - ' + NAMA_TOKO[tk] + ': Ecer Rp' + h.ecer.toLocaleString('id-ID') + 
+                 ', Ambil Rp' + h.ambil.toLocaleString('id-ID') + 
+                 ', Stok: ' + stok + '\n';
+    });
+    context += '\n';
+  });
+  return context;
+}
+
+// AI Chat tentang barang
+async function aiChatBarang(pertanyaan, sender) {
+  try {
+    // Cari barang relevan untuk context
+    const relevantItems = cariRelevan(pertanyaan, 30);
+    
+    if (relevantItems.length === 0) {
+      return null; // Tidak ada data, biar bot pakai response default
+    }
+    
+    const context = formatBarangUntukAI(relevantItems);
+    const nama = getNama(sender);
+    const sapaan = nama ? nama : 'kakak';
+    
+    const prompt = `Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.
+
+Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM, Perabot Mama Oesapa, Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).
+
+DATA BARANG YANG RELEVAN DENGAN PERTANYAAN:
+${context}
+
+PERTANYAAN USER (${sapaan}):
+"${pertanyaan}"
+
+ATURAN MENJAWAB:
+1. Jawab dengan ramah dan natural, panggil user dengan "${sapaan}"
+2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)
+3. Format harga: Rp 1.000.000 (pakai titik)
+4. Kalau bandingkan toko, gunakan format yang mudah dibaca
+5. Kalau stok kosong, sebutkan dengan jelas ⚠️
+6. Kalau ada banyak barang, prioritaskan yang paling relevan (max 5-10)
+7. Akhiri dengan tawaran bantuan ("Ada yang ingin ditanyakan lagi?")
+8. JANGAN buat informasi yang tidak ada di data
+9. Kalau data tidak cukup, bilang "Maaf, saya tidak menemukan info tersebut di database"
+10. Pakai *bold* untuk teks penting (WhatsApp format)
+11. Maksimal 1500 karakter
+
+Jawab pertanyaan user dengan tepat berdasarkan data di atas:`;
+
+    const resp = await axios.post(geminiUrl(), {
+      contents: [{ parts: [{ text: prompt }] }],
+    }, { timeout: 30000 });
+    
+    const jawaban = resp.data.candidates[0].content.parts[0].text || '';
+    return jawaban.trim();
+    
+  } catch (err) {
+    log.error('AI_CHAT', 'Gagal', err.message);
+    return null;
+  }
+}
+
+// Cek apakah pesan adalah pertanyaan tentang barang
+function isPertanyaanBarang(low) {
+  // Kata kunci yang menandakan pertanyaan tentang barang
+  const KATA_BARANG = [
+    'stok', 'stock', 'harga', 'price', 'berapa', 'ada gak', 'ada ga', 'ada kah',
+    'apakah ada', 'masih ada', 'bandingkan', 'banding', 'compare',
+    'rekomendasi', 'rekomen', 'sarankan', 'rekomen',
+    'termurah', 'termahal', 'paling murah', 'paling mahal',
+    'kosong', 'habis', 'tersedia',
+    'cek', 'check', 'lihat',
+    'total', 'jumlah', 'berapa banyak',
+  ];
+  
+  // Kata kunci nama barang umum
+  const KATA_BARANG_UMUM = [
+    'panci', 'dandang', 'wajan', 'rice cooker', 'kompor',
+    'gelas', 'piring', 'mangkok', 'sendok', 'garpu',
+    'eagle', 'maxim', 'sunkist', 'golden', 'paramount',
+    'aluminium', 'alm', 'stainless', 'plastik',
+  ];
+  
+  const adaKataTanya = KATA_BARANG.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaKataBarang = KATA_BARANG_UMUM.some(function(k) { return low.indexOf(k) >= 0; });
+  
+  // Anggap pertanyaan barang kalau:
+  // - Ada kata tanya + kata barang
+  // - ATAU pesan panjang (> 4 kata) yang mengandung kata barang
+  return (adaKataTanya && (adaKataBarang || low.length > 15)) ||
+         (low.split(/\s+/).length >= 4 && adaKataBarang);
+}
+
 function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
   const fmt = ' Format WhatsApp dengan emoji. Format rupiah Rp X.XXX.XXX.';
   if (menuType === 1) {
@@ -688,10 +829,15 @@ function getMenuUtama(nomor) {
   if (isMember(nomor)) m += '│ ' + emojiNum(4) + ' 🔍 Cari Harga Barang\n';
   if (isAdmin(nomor))  m += '│ ' + emojiNum(9) + ' 👑 Menu Admin\n';
   m += '└─────────────────────\n\n';
-  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n   atau ketik nama menunya';
+  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n   atau ketik nama menunya\n\n';
+  if (isMember(nomor)) {
+    m += '🤖 *Atau tanya langsung ke AI:*\n';
+    m += '   _"Stok dandang eagle 20 di NK?"_\n';
+    m += '   _"Harga termurah panci?"_\n';
+    m += '   _"Bandingkan rice cooker di toko"_';
+  }
   return m;
 }
-
 function getMenuPilihToko(menuType) {
   const ic = menuType === 1 ? '📊' : menuType === 2 ? '🏷️' : menuType === 'cari' ? '🔍' : '🛒';
   const jd = menuType === 1 ? 'LAPORAN PENJUALAN'
@@ -1385,6 +1531,32 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    if (isTerimakasih(low) && !_lagiInput) {
+      await kirimWA(sender, balasTerimakasih(sender));
+      return;
+    }
+
+    // ★★★ AI CHAT BARANG (hanya kalau tidak sedang dalam sesi/wizard) ★★★
+    if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length > 10) {
+      log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
+      await kirimWA(sender, '🤖 _Sedang berpikir..._');
+      
+      try {
+        const jawaban = await aiChatBarang(msg, sender);
+        if (jawaban) {
+          await kirimWA(sender, '🤖 ' + jawaban);
+        } else {
+          await kirimWA(sender, '🤔 Maaf, saya tidak menemukan informasi tersebut.\n\nCoba ketik *menu* untuk fitur lain, atau pertanyaan yang lebih spesifik.');
+        }
+      } catch (e) {
+        log.error('AI_CHAT', 'Error', e.message);
+        await kirimWA(sender, '⚠️ Sistem AI sedang sibuk. Coba lagi sebentar atau ketik *menu*.');
+      }
+      return;
+    }
+
+    const s = getSesi(sender);
+    
     const s = getSesi(sender);
 
     // ── ADMIN MODE INPUT ──
