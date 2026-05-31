@@ -1098,30 +1098,65 @@ function formatBarangUntukAI(items) {
 async function aiChatBarang(pertanyaan, sender) {
   let relevantItems = cariRelevan(pertanyaan, 30);
   if (relevantItems.length === 0) relevantItems = [];
-  const context = relevantItems.length > 0 
-    ? formatBarangUntukAI(relevantItems)
-    : '(Tidak ada barang yang cocok dengan kata kunci di database)';
+  
+  // ★ Deteksi toko yang disebut ★
+  const tokoFilter = deteksiTokoDariTeks(pertanyaan.toLowerCase());
+  
+  // Format context dengan filter toko jika ada
+  let context = '';
+  if (relevantItems.length > 0) {
+    relevantItems.forEach(function(d, i) {
+      context += (i + 1) + '. Kode: ' + d.kode + ' | Nama: ' + d.nama;
+      if (d.jenis) context += ' | Jenis: ' + d.jenis;
+      if (d.merek) context += ' | Merek: ' + d.merek;
+      context += ' | Satuan: ' + d.satuan + '\n';
+      context += '   Harga & Stok:\n';
+      
+      // Filter toko sesuai yang diminta
+      const tokoUntukShow = tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
+      tokoUntukShow.forEach(function(t) {
+        const h = d.harga[t.kode];
+        const stok = h.stok > 0 ? h.stok : 'KOSONG';
+        context += '   - ' + t.nama + ': Ecer Rp' + h.ecer.toLocaleString('id-ID') + 
+                   ', Ambil Rp' + h.ambil.toLocaleString('id-ID') + 
+                   ', Stok: ' + stok + '\n';
+      });
+      context += '\n';
+    });
+  } else {
+    context = '(Tidak ada barang yang cocok dengan kata kunci di database)';
+  }
+  
   const nama = getNama(sender);
   const sapaan = nama ? nama : 'kakak';
   const totalBarang = DATA_BARANG.length;
   
+  // Info filter toko di prompt
+  let filterInfo = '';
+  if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
+    filterInfo = '\nUSER MENANYAKAN TOKO SPESIFIK: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + 
+                 '\nJAWAB HANYA UNTUK TOKO YANG DIMINTA SAJA! Jangan tampilkan data toko lain.\n';
+  }
+  
   const prompt = 'Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.\n\n' +
     'Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM (TDM), Perabot Mama Oesapa (Oesapa), Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).\n' +
-    'Total database ada ' + totalBarang + ' barang.\n\n' +
-    'DATA BARANG YANG RELEVAN DENGAN PERTANYAAN (' + relevantItems.length + ' item):\n' +
+    'Total database ada ' + totalBarang + ' barang.\n' +
+    filterInfo + '\n' +
+    'DATA BARANG YANG RELEVAN (' + relevantItems.length + ' item):\n' +
     context + '\n\n' +
     'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
     'ATURAN MENJAWAB:\n' +
-    '1. Jawab ramah dan natural, panggil user dengan "' + sapaan + '"\n' +
-    '2. Gunakan emoji yang sesuai\n' +
-    '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
+    '1. Jawab ramah, panggil user dengan "' + sapaan + '"\n' +
+    '2. Pakai emoji yang sesuai\n' +
+    '3. Format harga: Rp 1.000.000\n' +
     '4. Pakai *bold* untuk teks penting\n' +
     '5. Maksimal 1500 karakter\n' +
-    '6. Selalu berikan jawaban yang berguna\n' +
-    '7. Akhiri dengan tawaran bantuan\n\n' +
-    'Jawab pertanyaan user sekarang:';
+    '6. PENTING: Kalau user sebut toko spesifik, JAWAB HANYA UNTUK TOKO ITU\n' +
+    '7. Selalu berikan jawaban yang berguna\n' +
+    '8. Akhiri dengan tawaran bantuan\n\n' +
+    'Jawab pertanyaan user:';
 
-  log.info('AI_CHAT', 'Kirim ke AI, context: ' + relevantItems.length + ' items');
+  log.info('AI_CHAT', 'Kirim ke AI, context: ' + relevantItems.length + ' items, filter toko: ' + tokoFilter.length);
   const result = await chatAI(prompt);
   if (result && result.jawaban) {
     log.info('AI_CHAT', '✅ Jawaban dari ' + result.provider);
@@ -1129,7 +1164,6 @@ async function aiChatBarang(pertanyaan, sender) {
   }
   return null;
 }
-
 function isPertanyaanBarang(low) {
   const KATA_TANYA = [
     'stok', 'stock', 'harga', 'price', 'berapa', 'ada gak', 'ada ga', 'ada kah',
@@ -1148,6 +1182,7 @@ function isPertanyaanBarang(low) {
     'aluminium', 'alm', 'stainless', 'plastik', 'kaca', 'keramik',
     'kursi', 'meja', 'lemari', 'rak', 'sumbu', 'minyak', 'gas',
     'tl', 'serbaguna', 'susu', 'jar', 'drink', 'keranjang', 'periuk',
+    'magic', 'com', 'mcm', 'mejicom',
   ];
   const KATA_TOKO = ['nk', 'tdm', 'oesapa', 'kefa', 'cp', 'nasional', 'central', 'mama', 'mamaku', 'kefamenanu'];
   const adaKataTanya = KATA_TANYA.some(function(k) { return low.indexOf(k) >= 0; });
@@ -1160,6 +1195,88 @@ function isPertanyaanBarang(low) {
          (adaKataTanya && adaKataToko) ||
          (adaKataBarang && adaKataToko) ||
          (jumlahKata >= 4 && adaKataBarang);
+}
+
+// ★★★ DETEKSI PERTANYAAN UMUM (untuk diteruskan ke AI) ★★★
+function isPertanyaanUmum(low) {
+  // Pertanyaan tentang bot itu sendiri
+  const TENTANG_BOT = [
+    'apa kabar', 'gimana kabar', 'bot apa kabar',
+    'bisa apa', 'bisa apa saja', 'kamu bisa apa', 'apa fungsi',
+    'siapa kamu', 'kamu siapa', 'nama kamu',
+    'bagaimana cara', 'cara pakai', 'tutorial', 'panduan',
+    'tolong', 'bantu', 'help', 'bantuan',
+    'kenapa', 'mengapa', 'kenapa kamu', 
+    'jelaskan', 'terangkan', 'beritahu',
+    'apakah kamu', 'apa kamu',
+  ];
+  
+  // Pertanyaan random/curhat/casual
+  const RANDOM_CHAT = [
+    'cerita', 'lucu', 'joke', 'humor',
+    'lagi apa', 'sedang apa', 'ngapain',
+    'mau dong', 'pengen', 'kepingin',
+    'gimana ya', 'bagaimana ya',
+    'bingung', 'pusing',
+  ];
+  
+  const KATA_TANYA_UMUM = [
+    'apa', 'siapa', 'dimana', 'kapan', 'bagaimana', 'kenapa', 'mengapa', 'berapa',
+    'bisakah', 'bolehkah', 'apakah',
+    '?',
+  ];
+  
+  const adaTentangBot = TENTANG_BOT.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaRandom = RANDOM_CHAT.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaTanya = KATA_TANYA_UMUM.some(function(k) { return low.indexOf(k) >= 0; });
+  const jumlahKata = low.split(/\s+/).length;
+  
+  return adaTentangBot || adaRandom || (adaTanya && jumlahKata >= 3);
+}
+
+// ★★★ AI CHAT UMUM (bukan tentang barang) ★★★
+async function aiChatUmum(pertanyaan, sender) {
+  const nama = getNama(sender);
+  const sapaan = nama ? nama : 'kakak';
+  
+  const prompt = 'Kamu adalah "Bot Perabot" - asisten WhatsApp untuk Toko Perabot dengan 5 cabang.\n\n' +
+    'Identitas kamu:\n' +
+    '- Nama: Bot Perabot\n' +
+    '- Tugas: Membantu cari harga barang, stok, laporan penjualan, dan info toko\n' +
+    '- 5 Toko: Nasional Kitchen, Perabot Mama TDM, Perabot Mama Oesapa, Perabot Mamaku Kefamenanu, Central Perabot\n' +
+    '- Database: 9.982 barang perabot/peralatan dapur\n\n' +
+    'Kemampuan kamu:\n' +
+    '1. Cari harga barang (ketik nama atau kode NN00001)\n' +
+    '2. Cek stok di setiap toko\n' +
+    '3. Bandingkan harga antar toko (termurah/termahal)\n' +
+    '4. Rekomendasi produk\n' +
+    '5. Bantu input laporan penjualan harian (Wizard mode)\n' +
+    '6. Laporan harga barang & marketplace\n' +
+    '7. Ngobrol santai 😊\n\n' +
+    'Cara user pakai:\n' +
+    '- Ketik *menu* untuk lihat menu utama\n' +
+    '- Ketik *1* untuk Laporan Penjualan\n' +
+    '- Ketik *4* untuk Cari Harga Barang\n' +
+    '- Atau tanya langsung: "stok dandang eagle di NK?"\n\n' +
+    'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
+    'ATURAN MENJAWAB:\n' +
+    '1. Jawab ramah, panggil "' + sapaan + '"\n' +
+    '2. Pakai emoji sesuai konteks\n' +
+    '3. Pakai *bold* WhatsApp\n' +
+    '4. Maksimal 1000 karakter\n' +
+    '5. Kalau ditanya "apa kabar" → jawab dengan ceria + tawarkan bantuan\n' +
+    '6. Kalau ditanya "bisa apa" → jelaskan fitur singkat + contoh\n' +
+    '7. Kalau random/curhat → respon ramah + ajak balik ke topik toko\n' +
+    '8. SELALU akhiri dengan tawaran bantuan\n\n' +
+    'Jawab user dengan ramah & natural:';
+
+  log.info('AI_UMUM', 'Pertanyaan umum: ' + pertanyaan.substring(0, 50));
+  const result = await chatAI(prompt);
+  if (result && result.jawaban) {
+    log.info('AI_UMUM', '✅ Jawaban dari ' + result.provider);
+    return result.jawaban;
+  }
+  return null;
 }
 // ════════════════════════════════════════════════════════════════
 //   10. SAPAAN PINTAR & MOTIVASI
@@ -1984,12 +2101,44 @@ app.post('/webhook', async function(req, res) {
       await kirimWA(sender, getMenuUtama(sender));
       return;
     }
-    if (isTerimakasih(low) && !_lagiInput) {
+        if (isTerimakasih(low) && !_lagiInput) {
       await kirimWA(sender, balasTerimakasih(sender));
       return;
     }
 
-       // ★★★ ANALISA BANDING HARGA ★★★
+    // ★★★ AI CHAT UMUM (pertanyaan random tentang bot/casual) ★★★
+    // Hanya aktif kalau bukan pertanyaan barang & bukan banding
+    if (!_lagiInput && isMember(sender) && isPertanyaanUmum(low) && 
+        !isPertanyaanBarang(low) && !isPertanyaanBanding(low) && 
+        msg.length >= 5) {
+      log.info('AI_UMUM', sender + ' tanya umum: ' + msg.substring(0, 80));
+      await kirimWA(sender, '🤖 _Sedang menjawab..._');
+      
+      try {
+        const jawaban = await aiChatUmum(msg, sender);
+        if (jawaban && jawaban.length > 10) {
+          await kirimWA(sender, '🤖 ' + jawaban);
+          return;
+        }
+      } catch (e) {
+        log.error('AI_UMUM', 'Exception: ' + e.message);
+      }
+      
+      // Fallback
+      const nama = getNama(sender);
+      const sapaan = nama ? '*' + nama + '*' : 'kakak';
+      await kirimWA(sender, '🤖 Hai ' + sapaan + '! 👋\n\n' +
+        'Saya *Bot Perabot* asisten untuk 5 toko perabot.\n\n' +
+        '💡 *Saya bisa bantu:*\n' +
+        '• 🔍 Cari harga & stok barang\n' +
+        '• 📊 Bandingkan harga antar toko\n' +
+        '• 📝 Input laporan penjualan\n' +
+        '• ⭐ Rekomendasi produk\n\n' +
+        'Ketik *menu* untuk lihat semua fitur!');
+      return;
+    }
+
+    // ★★★ ANALISA BANDING HARGA ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
       log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
       await kirimWA(sender, '📊 _Menganalisa perbandingan harga..._');
@@ -2171,9 +2320,14 @@ app.post('/webhook', async function(req, res) {
         return;
       }
     }
-    // ★★★ AI CHAT BARANG ★★★
+       // ★★★ AI CHAT BARANG ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
       log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
+      
+      // ★ DETEKSI TOKO YANG DISEBUT USER ★
+      const tokoDisebutAI = deteksiTokoDariTeks(low);
+      log.info('AI_CHAT', 'Toko terdeteksi: ' + tokoDisebutAI.map(function(t) { return t.kode; }).join(',') || 'SEMUA');
+      
       await kirimWA(sender, '🤖 _Sedang berpikir..._');
       let aiJawaban = null;
       try { aiJawaban = await aiChatBarang(msg, sender); } 
@@ -2189,15 +2343,23 @@ app.post('/webhook', async function(req, res) {
       if (hasil.hasil && hasil.hasil.length > 0) {
         let resp = '🤖 *Hasil Pencarian:*\n' + GARIS_TEBAL + '\n\n';
         const items = hasil.hasil.slice(0, 5);
+        
+        // ★ KALAU ADA TOKO SPESIFIK, TAMPILKAN HANYA TOKO ITU ★
+        const tokoUntukTampil = tokoDisebutAI.length > 0 ? tokoDisebutAI : TOKO_LIST;
+        
+        if (tokoDisebutAI.length > 0) {
+          resp += '🎯 *Filter Toko:* ' + tokoDisebutAI.map(function(t) { return t.nama; }).join(', ') + '\n\n';
+        }
+        
         items.forEach(function(d, i) {
           resp += '*' + (i + 1) + '. ' + d.nama + '*\n';
           resp += '🔖 Kode: _' + d.kode + '_\n';
           resp += '📏 Satuan: ' + d.satuan + '\n\n';
-          resp += '💰 *Harga & Stok per Toko:*\n';
-          Object.keys(NAMA_TOKO).forEach(function(tk) {
-            const h = d.harga[tk];
+          resp += '💰 *Harga & Stok:*\n';
+          tokoUntukTampil.forEach(function(t) {
+            const h = d.harga[t.kode];
             const stok = h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong';
-            resp += '🏪 _' + NAMA_TOKO[tk] + '_\n';
+            resp += '🏪 _' + t.nama + '_\n';
             resp += '   • Ecer: ' + fRp(h.ecer) + '\n';
             resp += '   • Ambil: ' + fRp(h.ambil) + '\n';
             resp += '   • Stok: ' + stok + '\n';
