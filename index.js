@@ -1545,12 +1545,20 @@ app.post('/webhook', async function(req, res) {
     const body = req.body || {};
     const sender = body.sender || body.from || body.phone || null;
     const message = (body.message || body.text || body.msg || '').trim();
-    const image = body.image || body.file || body.media || '';
+        const image = body.image || body.file || body.media || body.url || body.attachment || body.fileUrl || body.mediaUrl || '';
     if (!sender) return;
     const msg = message;
     const low = msg.toLowerCase();
 
-    log.info('WEBHOOK', sender + ': ' + (image ? '[FOTO] ' : '') + msg.substring(0, 50));
+        log.info('WEBHOOK', sender + ': ' + (image ? '[FOTO: ' + image.substring(0, 50) + '] ' : '') + msg.substring(0, 50));
+    
+    // DEBUG: log semua field body untuk cek field foto
+    if (!image && body) {
+      const bodyKeys = Object.keys(body).filter(function(k) { return body[k] && typeof body[k] === 'string' && (body[k].startsWith('http') || body[k].indexOf('.jpg') >= 0 || body[k].indexOf('.png') >= 0 || body[k].indexOf('.jpeg') >= 0); });
+      if (bodyKeys.length > 0) {
+        log.warn('WEBHOOK', 'POSSIBLE IMAGE FIELDS: ' + bodyKeys.map(function(k) { return k + '=' + String(body[k]).substring(0, 50); }).join(' | '));
+      }
+    }
 
     // ── SAPAAN PERTAMA ──
     if (!SUDAH_DISAPA[sender]) {
