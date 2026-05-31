@@ -932,7 +932,24 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
     filterInfo + '\n' +
     'DATA RELEVAN (' + relevantItems.length + ' item):\n' + context + '\n\n' +
     'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
-    'ATURAN:\n1. Ramah, panggil "' + sapaan + '"\n2. Pakai emoji\n3. Format harga: Rp 1.000.000\n4. *bold* untuk penting\n5. Max 1500 char\n6. Patuhi konteks toko!\n7. Akhiri tawaran bantuan\n\nJawab:';
+    'ATURAN PENTING:\n' +
+    '1. Ramah, panggil "' + sapaan + '"\n' +
+    '2. Pakai emoji yang sesuai\n' +
+    '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
+    '4. Pakai *bold* untuk teks penting\n' +
+    '5. Max 1500 char\n' +
+    '6. Patuhi konteks toko!\n' +
+    '7. ⚠️ *WAJIB:* SELALU TAMPILKAN HARGA ECER & AMBIL walau stok KOSONG!\n' +
+    '   Format harus seperti ini:\n' +
+    '   📦 *NAMA BARANG*\n' +
+    '   💰 Harga Ecer: Rp X.XXX.XXX\n' +
+    '   💰 Harga Ambil: Rp X.XXX.XXX\n' +
+    '   📊 Stok: ⚠️ KOSONG (atau jumlahnya)\n' +
+    '8. JANGAN HANYA bilang "stok kosong" tanpa menampilkan harga!\n' +
+    '9. Setelah info harga & stok, baru tambahkan komentar/rekomendasi\n' +
+    '10. Kalau stok kosong, sarankan cek toko lain (kalau tidak ada filter toko)\n' +
+    '11. Akhiri dengan tawaran bantuan\n\n' +
+    'Jawab pertanyaan user dengan LENGKAP (harga ECER + AMBIL + STOK):';
 
   const result = await chatAI(prompt);
   if (result && result.jawaban) {
