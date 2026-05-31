@@ -2,7 +2,7 @@
 
 // ════════════════════════════════════════════════════════════════
 //   BOT WHATSAPP - LAPORAN & CARI HARGA BARANG
-//   Versi 3.8 - Multi-AI (Groq + Gemini + OpenRouter)
+//   Versi 3.9 - Multi-AI + Banding Harga Termurah/Termahal
 // ════════════════════════════════════════════════════════════════
 
 require('dotenv').config();
@@ -465,7 +465,210 @@ function updateStok(kode, tokoKode, jumlah) {
 
 loadExcel();
 // ════════════════════════════════════════════════════════════════
-//   6. KIRIM WHATSAPP (FONNTE)
+//   6. ★★★ ANALISA PERBANDINGAN HARGA ★★★
+// ════════════════════════════════════════════════════════════════
+
+function analisaPerbandinganHarga(item) {
+  const hasil = {
+    item: item,
+    analisa: { ecer: null, ambil: null },
+    adaToko: [],
+    kosongToko: [],
+    stokAda: [],
+    stokKosong: [],
+  };
+  
+  const dataEcer = [];
+  const dataAmbil = [];
+  
+  TOKO_LIST.forEach(function(t) {
+    const h = item.harga[t.kode];
+    if (h.ecer > 0) {
+      dataEcer.push({ toko: t, harga: h.ecer });
+      hasil.adaToko.push(t);
+    } else {
+      hasil.kosongToko.push(t);
+    }
+    if (h.ambil > 0) dataAmbil.push({ toko: t, harga: h.ambil });
+    if (h.stok > 0) hasil.stokAda.push({ toko: t, stok: h.stok });
+    else hasil.stokKosong.push(t);
+  });
+  
+  if (dataEcer.length > 0) {
+    const sortedEcer = dataEcer.sort(function(a, b) { return a.harga - b.harga; });
+    const termurah = sortedEcer[0];
+    const termahal = sortedEcer[sortedEcer.length - 1];
+    const avgEcer = Math.round(sortedEcer.reduce(function(sum, x) { return sum + x.harga; }, 0) / sortedEcer.length);
+    const selisih = termahal.harga - termurah.harga;
+    const persenSelisih = termurah.harga > 0 ? Math.round((selisih / termurah.harga) * 100) : 0;
+    hasil.analisa.ecer = {
+      termurah: termurah, termahal: termahal,
+      rataRata: avgEcer, selisih: selisih, persenSelisih: persenSelisih,
+      semuaSama: sortedEcer.every(function(x) { return x.harga === sortedEcer[0].harga; }),
+      sorted: sortedEcer,
+    };
+  }
+  
+  if (dataAmbil.length > 0) {
+    const sortedAmbil = dataAmbil.sort(function(a, b) { return a.harga - b.harga; });
+    const termurah = sortedAmbil[0];
+    const termahal = sortedAmbil[sortedAmbil.length - 1];
+    const avgAmbil = Math.round(sortedAmbil.reduce(function(sum, x) { return sum + x.harga; }, 0) / sortedAmbil.length);
+    const selisih = termahal.harga - termurah.harga;
+    const persenSelisih = termurah.harga > 0 ? Math.round((selisih / termurah.harga) * 100) : 0;
+    hasil.analisa.ambil = {
+      termurah: termurah, termahal: termahal,
+      rataRata: avgAmbil, selisih: selisih, persenSelisih: persenSelisih,
+      semuaSama: sortedAmbil.every(function(x) { return x.harga === sortedAmbil[0].harga; }),
+      sorted: sortedAmbil,
+    };
+  }
+  
+  return hasil;
+}
+
+function formatAnalisaBandingHarga(item, sender) {
+  const nama = getNama(sender);
+  const suffix = '\n\n' + (nama ? '_Semoga membantu, *' + nama + '*!_ 😊' : '_Semoga membantu!_ 😊');
+  const a = analisaPerbandinganHarga(item);
+  
+  let msg = '📊 *ANALISA PERBANDINGAN HARGA*\n';
+  msg += GARIS_TEBAL + '\n';
+  msg += '🔖 *Kode:* ' + item.kode + '\n';
+  msg += '📦 *Nama:* ' + item.nama + '\n';
+  msg += '🏷️ *Jenis:* ' + (item.jenis || '-') + '\n';
+  msg += '🏗️ *Merek:* ' + (item.merek || '-') + '\n';
+  msg += '📏 *Satuan:* ' + item.satuan + '\n';
+  msg += GARIS_TEBAL + '\n\n';
+  
+  msg += '💰 *HARGA ECER PER TOKO:*\n';
+  msg += GARIS_TIPIS + '\n';
+  TOKO_LIST.forEach(function(t) {
+    const h = item.harga[t.kode];
+    const hargaStr = h.ecer > 0 ? fRp(h.ecer) : '⚠️ Tidak ada harga';
+    msg += '🏪 *' + t.nama + '*\n';
+    msg += '   ' + hargaStr;
+    if (a.analisa.ecer) {
+      if (h.ecer === a.analisa.ecer.termurah.harga && h.ecer > 0) msg += ' 🟢 *TERMURAH*';
+      else if (h.ecer === a.analisa.ecer.termahal.harga && h.ecer > 0 && !a.analisa.ecer.semuaSama) msg += ' 🔴 *TERMAHAL*';
+    }
+    msg += '\n';
+  });
+  msg += '\n';
+  
+  if (a.analisa.ecer) {
+    msg += '📈 *ANALISA HARGA ECER:*\n';
+    msg += GARIS_TIPIS + '\n';
+    if (a.analisa.ecer.semuaSama) {
+      msg += '✅ *Harga SAMA* di semua toko: ' + fRp(a.analisa.ecer.termurah.harga) + '\n';
+    } else {
+      msg += '🟢 *Termurah:* ' + a.analisa.ecer.termurah.toko.nama + '\n';
+      msg += '   ' + fRp(a.analisa.ecer.termurah.harga) + '\n\n';
+      msg += '🔴 *Termahal:* ' + a.analisa.ecer.termahal.toko.nama + '\n';
+      msg += '   ' + fRp(a.analisa.ecer.termahal.harga) + '\n\n';
+      msg += '📊 *Rata-rata:* ' + fRp(a.analisa.ecer.rataRata) + '\n';
+      msg += '💸 *Selisih:* ' + fRp(a.analisa.ecer.selisih) + ' _(_*' + a.analisa.ecer.persenSelisih + '%* _lebih mahal)_\n';
+      msg += '\n💡 *Rekomendasi:*\n';
+      msg += 'Hemat ' + fRp(a.analisa.ecer.selisih) + ' (' + a.analisa.ecer.persenSelisih + '%) ';
+      msg += 'kalau beli di *' + a.analisa.ecer.termurah.toko.nama + '*!';
+    }
+    msg += '\n\n';
+  }
+  
+  msg += '📦 *STATUS STOK:*\n';
+  msg += GARIS_TIPIS + '\n';
+  if (a.stokAda.length === 0) {
+    msg += '⚠️ *STOK KOSONG DI SEMUA TOKO!*\n';
+  } else {
+    msg += '✅ *Stok tersedia di ' + a.stokAda.length + ' toko:*\n';
+    a.stokAda.forEach(function(s) {
+      msg += '   • ' + s.toko.nama + ': ' + s.stok + ' ' + item.satuan + '\n';
+    });
+    if (a.stokKosong.length > 0) {
+      msg += '\n⚠️ *Stok kosong di ' + a.stokKosong.length + ' toko:*\n';
+      a.stokKosong.forEach(function(t) {
+        msg += '   • ' + t.nama + '\n';
+      });
+    }
+  }
+  
+  msg += '\n' + GARIS_TEBAL;
+  return msg + suffix;
+}
+
+function isPertanyaanBanding(low) {
+  const KATA_BANDING = [
+    'banding', 'bandingkan', 'compare', 'komparasi',
+    'termurah', 'termahal', 'paling murah', 'paling mahal',
+    'lebih murah', 'lebih mahal', 'mana yang murah', 'mana yang mahal',
+    'dimana murah', 'dimana mahal', 'di toko mana',
+    'selisih', 'beda harga', 'perbedaan harga',
+    'analisa harga', 'analisis harga',
+  ];
+  return KATA_BANDING.some(function(k) { return low.indexOf(k) >= 0; });
+}
+
+function cariMultipleAnalisa(keyword, jenisAnalisa) {
+  const hasil = cariBarang(keyword);
+  const items = hasil.hasil || [];
+  if (items.length === 0) return null;
+  
+  const itemsWithAnalisa = items.map(function(item) {
+    const a = analisaPerbandinganHarga(item);
+    return {
+      item: item,
+      analisa: a,
+      minHarga: a.analisa.ecer ? a.analisa.ecer.termurah.harga : 999999999,
+      maxHarga: a.analisa.ecer ? a.analisa.ecer.termahal.harga : 0,
+      tokoMurah: a.analisa.ecer ? a.analisa.ecer.termurah.toko : null,
+      tokoMahal: a.analisa.ecer ? a.analisa.ecer.termahal.toko : null,
+    };
+  }).filter(function(x) { return x.analisa.analisa.ecer !== null; });
+  
+  if (jenisAnalisa === 'termurah') {
+    itemsWithAnalisa.sort(function(a, b) { return a.minHarga - b.minHarga; });
+  } else if (jenisAnalisa === 'termahal') {
+    itemsWithAnalisa.sort(function(a, b) { return b.maxHarga - a.maxHarga; });
+  }
+  return itemsWithAnalisa;
+}
+
+function formatMultipleBanding(items, jenisAnalisa, keyword, sender) {
+  const nama = getNama(sender);
+  const suffix = '\n\n' + (nama ? '_Semoga membantu, *' + nama + '*!_ 😊' : '_Semoga membantu!_ 😊');
+  const judul = jenisAnalisa === 'termurah' ? '🟢 TOP TERMURAH' : 
+                jenisAnalisa === 'termahal' ? '🔴 TOP TERMAHAL' : 
+                '📊 PERBANDINGAN HARGA';
+  let msg = judul + '\n';
+  msg += GARIS_TEBAL + '\n';
+  msg += '🔍 Pencarian: _"' + keyword + '"_\n';
+  msg += '📦 Ditemukan: ' + items.length + ' barang\n';
+  msg += GARIS_TEBAL + '\n\n';
+  
+  const top = items.slice(0, 5);
+  top.forEach(function(x, i) {
+    const item = x.item;
+    const a = x.analisa.analisa.ecer;
+    msg += '*' + (i + 1) + '. ' + item.nama + '*\n';
+    msg += '   🔖 ' + item.kode + ' | ' + item.satuan + '\n';
+    if (a.semuaSama) {
+      msg += '   💰 ' + fRp(a.termurah.harga) + ' _(sama di semua toko)_\n';
+    } else {
+      msg += '   🟢 Termurah: ' + fRp(a.termurah.harga) + ' _(di ' + a.termurah.toko.nama + ')_\n';
+      msg += '   🔴 Termahal: ' + fRp(a.termahal.harga) + ' _(di ' + a.termahal.toko.nama + ')_\n';
+      msg += '   💸 Selisih: ' + fRp(a.selisih) + ' (' + a.persenSelisih + '%)\n';
+    }
+    msg += '\n';
+  });
+  
+  if (items.length > 5) msg += '_+' + (items.length - 5) + ' barang lainnya_\n\n';
+  msg += GARIS_TEBAL + '\n';
+  msg += '💡 Ketik *kode barang* untuk detail lengkap';
+  return msg + suffix;
+}
+
+// ════════════════════════════════════════════════════════════════
+//   7. KIRIM WHATSAPP (FONNTE)
 // ════════════════════════════════════════════════════════════════
 
 function tunggu(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
@@ -486,7 +689,7 @@ async function kirimWA(target, message, retry) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   7. ★★★ MULTI-AI PROVIDER SYSTEM ★★★
+//   8. MULTI-AI PROVIDER SYSTEM
 // ════════════════════════════════════════════════════════════════
 
 let currentGeminiKeyIndex = 0;
@@ -512,25 +715,13 @@ function rotateGeminiKey() {
   }
 }
 
-// ── PROVIDER: GROQ (Llama 3.3 70B - SUPER CEPAT) ──────────────
 async function chatGroq(prompt) {
   if (!CONFIG.groqKey) return null;
   try {
     const resp = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
-      {
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 1500,
-      },
-      {
-        headers: {
-          'Authorization': 'Bearer ' + CONFIG.groqKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      }
+      { model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1500 },
+      { headers: { 'Authorization': 'Bearer ' + CONFIG.groqKey, 'Content-Type': 'application/json' }, timeout: 30000 }
     );
     const jawaban = resp.data.choices[0].message.content || '';
     log.info('GROQ', 'OK, response length: ' + jawaban.length);
@@ -542,7 +733,6 @@ async function chatGroq(prompt) {
   }
 }
 
-// ── PROVIDER: GEMINI ───────────────────────────────────────────
 async function chatGemini(prompt) {
   if (!CONFIG.geminiKey) return null;
   const keys = geminiKeys();
@@ -557,37 +747,20 @@ async function chatGemini(prompt) {
     } catch (err) {
       const status = err.response ? err.response.status : 'NETWORK';
       log.warn('GEMINI', 'Gagal key #' + (currentGeminiKeyIndex + 1) + ' (' + status + ')');
-      if (status === 429 && keys.length > 1) {
-        rotateGeminiKey();
-        continue;
-      }
+      if (status === 429 && keys.length > 1) { rotateGeminiKey(); continue; }
       return null;
     }
   }
   return null;
 }
 
-// ── PROVIDER: OPENROUTER ───────────────────────────────────────
 async function chatOpenRouter(prompt) {
   if (!CONFIG.openrouterKey) return null;
   try {
     const resp = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
-      {
-        model: 'meta-llama/llama-3.2-3b-instruct:free',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 1500,
-      },
-      {
-        headers: {
-          'Authorization': 'Bearer ' + CONFIG.openrouterKey,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/dimassilitonga99/bot-whatsapp',
-          'X-Title': 'Bot Toko Perabot',
-        },
-        timeout: 30000,
-      }
+      { model: 'meta-llama/llama-3.2-3b-instruct:free', messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 1500 },
+      { headers: { 'Authorization': 'Bearer ' + CONFIG.openrouterKey, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://github.com/dimassilitonga99/bot-whatsapp', 'X-Title': 'Bot Toko Perabot' }, timeout: 30000 }
     );
     const jawaban = resp.data.choices[0].message.content || '';
     log.info('OPENROUTER', 'OK, response length: ' + jawaban.length);
@@ -599,7 +772,6 @@ async function chatOpenRouter(prompt) {
   }
 }
 
-// ★★★ MULTI-AI ROUTER ★★★
 async function chatAI(prompt) {
   if (CONFIG.groqKey) {
     log.info('AI', 'Coba GROQ...');
@@ -620,7 +792,6 @@ async function chatAI(prompt) {
   return null;
 }
 
-// ── ANALISA GAMBAR (khusus Gemini karena Groq/OR belum support image) ──
 async function analisaGambar(imageUrl, prompt) {
   const imgResp   = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 15000 });
   const mimeType  = imgResp.headers['content-type'] || 'image/jpeg';
@@ -635,10 +806,7 @@ async function analisaGambar(imageUrl, prompt) {
     } catch (err) {
       const status = err.response ? err.response.status : 'NETWORK';
       log.warn('GEMINI_IMG', 'Gagal key #' + (currentGeminiKeyIndex + 1) + ' (' + status + ')');
-      if (status === 429 && keys.length > 1) {
-        rotateGeminiKey();
-        continue;
-      }
+      if (status === 429 && keys.length > 1) { rotateGeminiKey(); continue; }
       throw err;
     }
   }
@@ -662,7 +830,7 @@ function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   8. AI CHAT BARANG
+//   9. AI CHAT BARANG
 // ════════════════════════════════════════════════════════════════
 
 function cariRelevan(pertanyaan, maxResults) {
@@ -728,10 +896,7 @@ function formatBarangUntukAI(items) {
 
 async function aiChatBarang(pertanyaan, sender) {
   let relevantItems = cariRelevan(pertanyaan, 30);
-  if (relevantItems.length === 0) {
-    log.warn('AI_CHAT', 'Tidak ada barang relevan, pakai context kosong');
-    relevantItems = [];
-  }
+  if (relevantItems.length === 0) relevantItems = [];
   const context = relevantItems.length > 0 
     ? formatBarangUntukAI(relevantItems)
     : '(Tidak ada barang yang cocok dengan kata kunci di database)';
@@ -744,20 +909,16 @@ async function aiChatBarang(pertanyaan, sender) {
     'Total database ada ' + totalBarang + ' barang.\n\n' +
     'DATA BARANG YANG RELEVAN DENGAN PERTANYAAN (' + relevantItems.length + ' item):\n' +
     context + '\n\n' +
-    'PERTANYAAN USER (' + sapaan + '):\n' +
-    '"' + pertanyaan + '"\n\n' +
+    'PERTANYAAN USER (' + sapaan + '):\n"' + pertanyaan + '"\n\n' +
     'ATURAN MENJAWAB:\n' +
     '1. Jawab ramah dan natural, panggil user dengan "' + sapaan + '"\n' +
-    '2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)\n' +
+    '2. Gunakan emoji yang sesuai\n' +
     '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
-    '4. Kalau bandingkan toko, gunakan format yang mudah dibaca\n' +
-    '5. Kalau stok kosong, sebutkan dengan jelas ⚠️\n' +
-    '6. Pakai *bold* untuk teks penting (WhatsApp format)\n' +
-    '7. Maksimal 1500 karakter\n' +
-    '8. Kalau di data tidak ada yang cocok, tampilkan barang MIRIP dari data di atas\n' +
-    '9. Selalu berikan jawaban yang berguna\n' +
-    '10. Akhiri dengan tawaran bantuan\n\n' +
-    'Jawab pertanyaan user sekarang dengan ramah dan helpful:';
+    '4. Pakai *bold* untuk teks penting\n' +
+    '5. Maksimal 1500 karakter\n' +
+    '6. Selalu berikan jawaban yang berguna\n' +
+    '7. Akhiri dengan tawaran bantuan\n\n' +
+    'Jawab pertanyaan user sekarang:';
 
   log.info('AI_CHAT', 'Kirim ke AI, context: ' + relevantItems.length + ' items');
   const result = await chatAI(prompt);
@@ -771,9 +932,8 @@ async function aiChatBarang(pertanyaan, sender) {
 function isPertanyaanBarang(low) {
   const KATA_TANYA = [
     'stok', 'stock', 'harga', 'price', 'berapa', 'ada gak', 'ada ga', 'ada kah',
-    'apakah ada', 'masih ada', 'bandingkan', 'banding', 'compare', 'samakan',
+    'apakah ada', 'masih ada', 'samakan',
     'rekomendasi', 'rekomen', 'sarankan', 'saran',
-    'termurah', 'termahal', 'paling murah', 'paling mahal',
     'kosong', 'habis', 'tersedia', 'tersisa',
     'cek', 'check', 'lihat', 'tampilkan',
     'total', 'jumlah', 'berapa banyak',
@@ -785,11 +945,8 @@ function isPertanyaanBarang(low) {
     'gelas', 'piring', 'mangkok', 'sendok', 'garpu', 'pisau',
     'eagle', 'maxim', 'sunkist', 'golden', 'paramount', 'hock', 'sunlife', 'miyako',
     'aluminium', 'alm', 'stainless', 'plastik', 'kaca', 'keramik',
-    'kursi', 'meja', 'lemari', 'rak',
-    'sumbu', 'minyak', 'gas',
-    'tl', 'serbaguna', 'susu',
-    'jar', 'drink', 'keranjang',
-    'periuk',
+    'kursi', 'meja', 'lemari', 'rak', 'sumbu', 'minyak', 'gas',
+    'tl', 'serbaguna', 'susu', 'jar', 'drink', 'keranjang', 'periuk',
   ];
   const KATA_TOKO = ['nk', 'tdm', 'oesapa', 'kefa', 'cp', 'nasional', 'central', 'mama', 'mamaku', 'kefamenanu'];
   const adaKataTanya = KATA_TANYA.some(function(k) { return low.indexOf(k) >= 0; });
@@ -803,9 +960,8 @@ function isPertanyaanBarang(low) {
          (adaKataBarang && adaKataToko) ||
          (jumlahKata >= 4 && adaKataBarang);
 }
-
 // ════════════════════════════════════════════════════════════════
-//   9. SAPAAN PINTAR & MOTIVASI
+//   10. SAPAAN PINTAR & MOTIVASI
 // ════════════════════════════════════════════════════════════════
 
 const SAPAAN_MAP = {
@@ -956,8 +1112,9 @@ function isAdminCommand(low) {
   if (['listmember','listkontak','reload','info'].indexOf(low) >= 0) return true;
   return ADMIN_COMMANDS.some(function(cmd) { return low.startsWith(cmd + ' '); });
 }
+
 // ════════════════════════════════════════════════════════════════
-//   10. MENU FRIENDLY
+//   11. MENU FRIENDLY
 // ════════════════════════════════════════════════════════════════
 
 function getMenuUtama(nomor) {
@@ -974,10 +1131,13 @@ function getMenuUtama(nomor) {
   m += '└─────────────────────\n\n';
   m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *1*)\n   atau ketik nama menunya\n\n';
   if (isMember(nomor)) {
-    m += '🤖 *Atau tanya langsung ke AI:*\n';
+    m += '🤖 *Tanya langsung (AI):*\n';
     m += '   _"Stok dandang eagle 20 di NK?"_\n';
-    m += '   _"Harga termurah panci?"_\n';
-    m += '   _"Bandingkan rice cooker di toko"_';
+    m += '   _"Cek harga panci di TDM"_\n\n';
+    m += '📊 *Banding Harga:*\n';
+    m += '   _"Bandingkan harga NN00001"_\n';
+    m += '   _"Panci eagle termurah dimana?"_\n';
+    m += '   _"Selisih harga dandang"_';
   }
   return m;
 }
@@ -1057,7 +1217,7 @@ function getMenuCariUlang(namaToko) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   11. WIZARD MODE
+//   12. WIZARD MODE
 // ════════════════════════════════════════════════════════════════
 
 function wizardGetNextField(tokoKode, dataWizard) {
@@ -1152,7 +1312,7 @@ function wizardToText(dataWizard, tokoKode) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   12. PARSER PINTAR
+//   13. PARSER PINTAR
 // ════════════════════════════════════════════════════════════════
 
 function parsePilihanMenu(low) {
@@ -1204,7 +1364,7 @@ function parsePilihanAdmin(low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   13. FORMAT HASIL CARI
+//   14. FORMAT HASIL CARI
 // ════════════════════════════════════════════════════════════════
 
 function formatHasil(searchResult, tokoKode, sender) {
@@ -1257,9 +1417,8 @@ function formatHasil(searchResult, tokoKode, sender) {
   if (totalDitemukan > CONFIG.maxHasilCari) msg += '\n\n⚠️ Masih ada *' + (totalDitemukan - CONFIG.maxHasilCari) + '* barang lagi.';
   return msg + suffix;
 }
-
 // ════════════════════════════════════════════════════════════════
-//   14. GENERATOR LAPORAN
+//   15. GENERATOR LAPORAN
 // ════════════════════════════════════════════════════════════════
 
 function genLapPenjualan(text, namaToko, kemarin, tokoKode) {
@@ -1472,7 +1631,7 @@ function genLapMarket(text, kemarin) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   15. HANDLER ADMIN
+//   16. HANDLER ADMIN
 // ════════════════════════════════════════════════════════════════
 
 async function handleAdmin(sender, msg, low) {
@@ -1541,6 +1700,7 @@ async function handleAdmin(sender, msg, low) {
     if (CONFIG.groqKey) aiStatus += '\n  ✅ Groq';
     if (CONFIG.geminiKey) aiStatus += '\n  ✅ Gemini (' + geminiKeys().length + ' keys)';
     if (CONFIG.openrouterKey) aiStatus += '\n  ✅ OpenRouter';
+    if (!aiStatus) aiStatus = '\n  ⚠️ Tidak ada AI provider';
     await kirimWA(sender, 'ℹ️ Info Sistem\n------------------' +
       '\nUptime: ' + jam + 'j ' + mnt + 'm\nMember: ' + MEMBERS.length + '/' + CONFIG.maxMember +
       '\nData: ' + DATA_BARANG.length + ' item\nKontak: ' + Object.keys(KONTAK).length +
@@ -1552,11 +1712,11 @@ async function handleAdmin(sender, msg, low) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//   16. ROUTES
+//   17. ROUTES
 // ════════════════════════════════════════════════════════════════
 
 app.get('/', function(req, res) {
-  res.json({ status: 'ok', app: CONFIG.appName + ' v3.8', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
+  res.json({ status: 'ok', app: CONFIG.appName + ' v3.9', items: DATA_BARANG.length, members: MEMBERS.length + '/' + CONFIG.maxMember });
 });
 app.get('/reload', function(req, res) {
   const ok = loadExcel();
@@ -1568,7 +1728,7 @@ app.get('/resetsesi/:nomor', function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   17. WEBHOOK UTAMA
+//   18. WEBHOOK UTAMA
 // ════════════════════════════════════════════════════════════════
 
 const KATA_RESET = ['batal', 'menu', 'mulai', 'start', 'kembali', 'home'];
@@ -1588,6 +1748,7 @@ app.post('/webhook', async function(req, res) {
 
     log.info('WEBHOOK', sender + ': ' + msg.substring(0, 50));
 
+    // ── SAPAAN PERTAMA ──
     if (!SUDAH_DISAPA[sender]) {
       SUDAH_DISAPA[sender] = true;
       saveJSON(CONFIG.paths.disapa, SUDAH_DISAPA);
@@ -1597,6 +1758,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── ADMIN COMMAND ──
     if (isAdmin(sender) && isAdminCommand(low)) {
       if (SESI[sender] && (SESI[sender].mode || SESI[sender].menu || SESI[sender].adminAksi)) resetSesi(sender);
       const handled = await handleAdmin(sender, msg, low);
@@ -1606,12 +1768,14 @@ app.post('/webhook', async function(req, res) {
     const _s = SESI[sender] || {};
     const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive;
 
+    // ── RESET ──
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
       return;
     }
 
+    // ── SAPAAN PINTAR ──
     const kataSapaan = isSapaan(low);
     if (kataSapaan && !_lagiInput) {
       await kirimWA(sender, sapaanBerikutnya(sender, kataSapaan));
@@ -1622,6 +1786,73 @@ app.post('/webhook', async function(req, res) {
     if (isTerimakasih(low) && !_lagiInput) {
       await kirimWA(sender, balasTerimakasih(sender));
       return;
+    }
+
+    // ★★★ ANALISA BANDING HARGA ★★★
+    if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
+      log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
+      await kirimWA(sender, '📊 _Menganalisa perbandingan harga..._');
+      
+      try {
+        const tanyaTermurah = low.indexOf('murah') >= 0;
+        const tanyaTermahal = low.indexOf('mahal') >= 0;
+        
+        let keyword = msg
+          .replace(/banding(kan)?/gi, '')
+          .replace(/termurah|termahal|paling murah|paling mahal/gi, '')
+          .replace(/lebih murah|lebih mahal/gi, '')
+          .replace(/dimana murah|dimana mahal|toko mana/gi, '')
+          .replace(/selisih|beda harga|perbedaan harga/gi, '')
+          .replace(/analisa harga|analisis harga|compare/gi, '')
+          .replace(/di toko|harga|harganya/gi, '')
+          .trim();
+        
+        if (!keyword || keyword.length < 2) {
+          await kirimWA(sender, '⚠️ *Format kurang jelas*\n\n💡 Contoh yang benar:\n• _bandingkan harga NN00001_\n• _panci eagle termurah_\n• _selisih harga dandang_\n• _analisa harga golden_');
+          return;
+        }
+        
+        const hasilCari = cariBarang(keyword);
+        const items = hasilCari.hasil || [];
+        
+        if (items.length === 0) {
+          if (hasilCari.saran && hasilCari.saran.length > 0) {
+            let resp = '🤔 *Tidak ditemukan persis*\n' + GARIS_TEBAL + '\n\n💡 Mungkin maksud kamu:\n\n';
+            hasilCari.saran.slice(0, 5).forEach(function(d, i) {
+              resp += '*' + (i + 1) + '.* ' + d.nama + ' (' + d.kode + ')\n';
+            });
+            resp += '\n💡 Ketik kode atau coba kata kunci lain';
+            await kirimWA(sender, resp);
+            return;
+          }
+          await kirimWA(sender, '❌ *Barang tidak ditemukan*\n\nKata kunci: _"' + keyword + '"_\n\n💡 Coba pakai kata kunci yang lebih umum');
+          return;
+        }
+        
+        if (items.length === 1) {
+          await kirimWA(sender, formatAnalisaBandingHarga(items[0], sender));
+          return;
+        }
+        
+        const jenisAnalisa = tanyaTermurah ? 'termurah' : tanyaTermahal ? 'termahal' : 'banding';
+        const multipleItems = cariMultipleAnalisa(keyword, jenisAnalisa);
+        
+        if (multipleItems && multipleItems.length > 0) {
+          await kirimWA(sender, formatMultipleBanding(multipleItems, jenisAnalisa, keyword, sender));
+          if (multipleItems.length === 1) {
+            await tunggu(1000);
+            await kirimWA(sender, formatAnalisaBandingHarga(multipleItems[0].item, sender));
+          }
+        } else {
+          await kirimWA(sender, '⚠️ Tidak ada barang dengan harga valid untuk dibandingkan');
+        }
+        return;
+        
+      } catch (e) {
+        log.error('BANDING', 'Error: ' + e.message);
+        await kirimWA(sender, '⚠️ Terjadi kesalahan saat menganalisa. Coba lagi atau ketik *menu*.');
+        return;
+      }
     }
 
     // ★★★ AI CHAT BARANG ★★★
@@ -1637,7 +1868,6 @@ app.post('/webhook', async function(req, res) {
         return;
       }
       
-      // Fallback: cari biasa
       log.warn('AI_CHAT', 'AI return kosong, fallback ke cari biasa');
       const hasil = cariBarang(msg);
       if (hasil.hasil && hasil.hasil.length > 0) {
@@ -1678,6 +1908,7 @@ app.post('/webhook', async function(req, res) {
 
     const s = getSesi(sender);
 
+    // ── ADMIN MODE INPUT ──
     if (isAdmin(sender) && s.adminAksi) {
       const aksi = s.adminAksi;
       updateSesi(sender, { adminAksi: null });
@@ -1687,6 +1918,7 @@ app.post('/webhook', async function(req, res) {
       if (aksi === 'hapuskontak') return await handleAdmin(sender, 'hapuskontak ' + msg, 'hapuskontak ' + low);
     }
 
+    // ── MENU ADMIN ──
     if (s.mode === 'admin_menu') {
       const aksi = parsePilihanAdmin(low);
       if (aksi === 'listmember' || aksi === 'listkontak' || aksi === 'reload' || aksi === 'info') {
@@ -1701,6 +1933,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── MODE CARI ──
     if (s.mode === 'cari') {
       if (!s.tokoKode) {
         if (low === '9') { updateSesi(sender, { tokoKode: null }); await kirimWA(sender, getMenuPilihToko('cari')); return; }
@@ -1733,6 +1966,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── LAPORAN: Pilih menu ──
     if (!s.menu && !s.mode) {
       const pilihan = parsePilihanMenu(low);
       if (pilihan === 1 || pilihan === 2) { updateSesi(sender, { menu: pilihan }); await kirimWA(sender, getMenuPilihToko(pilihan)); return; }
@@ -1754,6 +1988,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── LAPORAN: Pilih toko ──
     if (s.menu !== 3 && !s.toko) {
       const toko = parsePilihanToko(low);
       if (toko) { updateSesi(sender, { toko: toko.kode }); await kirimWA(sender, getMenuPilihHari(toko.nama)); return; }
@@ -1761,6 +1996,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── LAPORAN: Pilih hari ──
     if (s.kemarin === undefined || s.kemarin === null) {
       const kem = parsePilihanHari(low);
       if (kem === null) {
@@ -1790,9 +2026,11 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── LAPORAN: Input data ──
     const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
     let laporan = '';
 
+    // ── WIZARD MODE ──
     if (s.menu === 1 && s.wizardActive) {
       const dataWizard = s.wizardData || {};
       if (low === 'review') { await kirimWA(sender, wizardReview(s.toko, dataWizard, namaToko)); return; }
@@ -1901,6 +2139,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
+    // ── MODE NORMAL (foto atau ketik manual) ──
     if (image && image.length > 0) {
       await kirimWA(sender, '📸 Foto diterima, sedang dianalisa AI...');
       try {
@@ -1934,13 +2173,13 @@ app.post('/webhook', async function(req, res) {
 });
 
 // ════════════════════════════════════════════════════════════════
-//   18. START SERVER
+//   19. START SERVER
 // ════════════════════════════════════════════════════════════════
 
 app.listen(CONFIG.port, function() {
   console.log('\n=====================================');
-  console.log('  ' + CONFIG.appName + ' v3.8');
-  console.log('  (Multi-AI: Groq + Gemini + OR)');
+  console.log('  ' + CONFIG.appName + ' v3.9');
+  console.log('  (Multi-AI + Banding Harga)');
   console.log('=====================================');
   console.log('  Port      : ' + CONFIG.port);
   console.log('  Admin     : ' + CONFIG.adminNumber);
