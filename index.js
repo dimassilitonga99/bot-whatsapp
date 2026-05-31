@@ -1557,8 +1557,6 @@ app.post('/webhook', async function(req, res) {
 
     const s = getSesi(sender);
     
-    const s = getSesi(sender);
-
     // ── ADMIN MODE INPUT ──
     if (isAdmin(sender) && s.adminAksi) {
       const aksi = s.adminAksi;
