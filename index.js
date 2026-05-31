@@ -1095,12 +1095,21 @@ function formatBarangUntukAI(items) {
   return context;
 }
 
-async function aiChatBarang(pertanyaan, sender) {
+async function aiChatBarang(pertanyaan, sender, tokoAktif) {
   let relevantItems = cariRelevan(pertanyaan, 30);
   if (relevantItems.length === 0) relevantItems = [];
   
-  // ★ Deteksi toko yang disebut ★
-  const tokoFilter = deteksiTokoDariTeks(pertanyaan.toLowerCase());
+  // ★ PRIORITAS: tokoAktif (dari sesi) > tokoFilter (dari teks) ★
+  let tokoFilter = [];
+  
+  if (tokoAktif) {
+    // User sedang di mode cari toko tertentu → paksa filter
+    const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
+    if (tokoObj) tokoFilter = [tokoObj];
+  } else {
+    // Deteksi dari teks pertanyaan
+    tokoFilter = deteksiTokoDariTeks(pertanyaan.toLowerCase());
+  }
   
   // Format context dengan filter toko jika ada
   let context = '';
@@ -1112,7 +1121,6 @@ async function aiChatBarang(pertanyaan, sender) {
       context += ' | Satuan: ' + d.satuan + '\n';
       context += '   Harga & Stok:\n';
       
-      // Filter toko sesuai yang diminta
       const tokoUntukShow = tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
       tokoUntukShow.forEach(function(t) {
         const h = d.harga[t.kode];
@@ -1131,9 +1139,17 @@ async function aiChatBarang(pertanyaan, sender) {
   const sapaan = nama ? nama : 'kakak';
   const totalBarang = DATA_BARANG.length;
   
-  // Info filter toko di prompt
+  // Info filter toko (lebih tegas kalau ada tokoAktif)
   let filterInfo = '';
-  if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
+  if (tokoAktif) {
+    const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
+    if (tokoObj) {
+      filterInfo = '\n⚠️ KONTEKS PENTING: User sedang dalam MODE CARI di toko *' + tokoObj.nama + '*.\n' +
+                   'JAWAB HANYA UNTUK TOKO ' + tokoObj.nama.toUpperCase() + ' SAJA!\n' +
+                   'JANGAN tampilkan data toko lain. JANGAN sebutkan toko lain.\n' +
+                   'Fokus 100% pada ' + tokoObj.nama + '.\n';
+    }
+  } else if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
     filterInfo = '\nUSER MENANYAKAN TOKO SPESIFIK: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + 
                  '\nJAWAB HANYA UNTUK TOKO YANG DIMINTA SAJA! Jangan tampilkan data toko lain.\n';
   }
@@ -1151,12 +1167,12 @@ async function aiChatBarang(pertanyaan, sender) {
     '3. Format harga: Rp 1.000.000\n' +
     '4. Pakai *bold* untuk teks penting\n' +
     '5. Maksimal 1500 karakter\n' +
-    '6. PENTING: Kalau user sebut toko spesifik, JAWAB HANYA UNTUK TOKO ITU\n' +
+    '6. PENTING: Patuhi konteks toko di atas (kalau ada). JANGAN tampil toko lain!\n' +
     '7. Selalu berikan jawaban yang berguna\n' +
     '8. Akhiri dengan tawaran bantuan\n\n' +
     'Jawab pertanyaan user:';
 
-  log.info('AI_CHAT', 'Kirim ke AI, context: ' + relevantItems.length + ' items, filter toko: ' + tokoFilter.length);
+  log.info('AI_CHAT', 'Kirim ke AI, items: ' + relevantItems.length + ', tokoAktif: ' + (tokoAktif || 'none') + ', filter: ' + tokoFilter.length);
   const result = await chatAI(prompt);
   if (result && result.jawaban) {
     log.info('AI_CHAT', '✅ Jawaban dari ' + result.provider);
@@ -2138,7 +2154,7 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ★★★ ANALISA BANDING HARGA ★★★
+        // ★★★ ANALISA BANDING HARGA ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBanding(low)) {
       log.info('BANDING', sender + ' minta banding: ' + msg.substring(0, 80));
       await kirimWA(sender, '📊 _Menganalisa perbandingan harga..._');
@@ -2147,8 +2163,18 @@ app.post('/webhook', async function(req, res) {
         const tanyaTermurah = low.indexOf('murah') >= 0;
         const tanyaTermahal = low.indexOf('mahal') >= 0;
         
-        // ★ DETEKSI TOKO YANG DISEBUT ★
-        const tokoDisebut = deteksiTokoDariTeks(low);
+        // ★ CEK TOKO AKTIF dari sesi ★
+        const sesiBanding = SESI[sender] || {};
+        let tokoDisebut = [];
+        if (sesiBanding.mode === 'cari' && sesiBanding.tokoKode) {
+          // User sedang di mode cari toko tertentu
+          const tokoObj = TOKO_LIST.find(function(t) { return t.kode === sesiBanding.tokoKode; });
+          if (tokoObj) tokoDisebut = [tokoObj];
+          log.info('BANDING', 'Pakai toko AKTIF dari sesi: ' + sesiBanding.tokoKode);
+        } else {
+          // Deteksi dari teks
+          tokoDisebut = deteksiTokoDariTeks(low);
+        }
         log.info('BANDING', 'Toko terdeteksi: ' + tokoDisebut.map(function(t) { return t.kode; }).join(','));
         
         // Bersihkan keyword dari kata banding & nama toko
@@ -2320,20 +2346,28 @@ app.post('/webhook', async function(req, res) {
         return;
       }
     }
-       // ★★★ AI CHAT BARANG ★★★
+           // ★★★ AI CHAT BARANG ★★★
     if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
       log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
       
-      // ★ DETEKSI TOKO YANG DISEBUT USER ★
-      const tokoDisebutAI = deteksiTokoDariTeks(low);
-      log.info('AI_CHAT', 'Toko terdeteksi: ' + tokoDisebutAI.map(function(t) { return t.kode; }).join(',') || 'SEMUA');
+      // ★ CEK TOKO AKTIF dari sesi (mode cari) ★
+      const sesiUser = SESI[sender] || {};
+      let tokoAktif = null;
+      if (sesiUser.mode === 'cari' && sesiUser.tokoKode) {
+        tokoAktif = sesiUser.tokoKode;
+        log.info('AI_CHAT', 'TOKO AKTIF dari sesi: ' + tokoAktif);
+      }
+      
+      // ★ DETEKSI TOKO YANG DISEBUT USER (kalau gak ada tokoAktif) ★
+      const tokoDisebutAI = tokoAktif ? [] : deteksiTokoDariTeks(low);
+      log.info('AI_CHAT', 'Toko terdeteksi: ' + (tokoAktif || tokoDisebutAI.map(function(t) { return t.kode; }).join(',') || 'SEMUA'));
       
       await kirimWA(sender, '🤖 _Sedang berpikir..._');
       let aiJawaban = null;
-      try { aiJawaban = await aiChatBarang(msg, sender); } 
+      try { aiJawaban = await aiChatBarang(msg, sender, tokoAktif); } 
       catch (e) { log.error('AI_CHAT', 'Exception: ' + e.message); }
       
-      if (aiJawaban && aiJawaban.length > 10) {
+           if (aiJawaban && aiJawaban.length > 10) {
         await kirimWA(sender, '🤖 ' + aiJawaban);
         return;
       }
@@ -2344,12 +2378,22 @@ app.post('/webhook', async function(req, res) {
         let resp = '🤖 *Hasil Pencarian:*\n' + GARIS_TEBAL + '\n\n';
         const items = hasil.hasil.slice(0, 5);
         
-        // ★ KALAU ADA TOKO SPESIFIK, TAMPILKAN HANYA TOKO ITU ★
-        const tokoUntukTampil = tokoDisebutAI.length > 0 ? tokoDisebutAI : TOKO_LIST;
+        // ★ Prioritas filter: tokoAktif > tokoDisebut > semua toko ★
+        let tokoUntukTampil = TOKO_LIST;
+        let labelFilter = '';
         
-        if (tokoDisebutAI.length > 0) {
-          resp += '🎯 *Filter Toko:* ' + tokoDisebutAI.map(function(t) { return t.nama; }).join(', ') + '\n\n';
+        if (tokoAktif) {
+          const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
+          if (tokoObj) {
+            tokoUntukTampil = [tokoObj];
+            labelFilter = '🎯 *Toko Aktif:* ' + tokoObj.nama + '\n\n';
+          }
+        } else if (tokoDisebutAI.length > 0) {
+          tokoUntukTampil = tokoDisebutAI;
+          labelFilter = '🎯 *Filter Toko:* ' + tokoDisebutAI.map(function(t) { return t.nama; }).join(', ') + '\n\n';
         }
+        
+        if (labelFilter) resp += labelFilter;
         
         items.forEach(function(d, i) {
           resp += '*' + (i + 1) + '. ' + d.nama + '*\n';
