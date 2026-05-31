@@ -505,10 +505,10 @@ async function analisaGambar(imageUrl, prompt) {
 
 // Cari barang yang relevan dengan pertanyaan (untuk context AI)
 function cariRelevan(pertanyaan, maxResults) {
-  maxResults = maxResults || 30;
+  maxResults = maxResults || 50;
   const q = pertanyaan.toUpperCase();
   const qBersih = bersihkanTeks(q);
-  const words = qBersih.split(/\s+/).filter(function(w) { return w.length > 2; });
+  const words = qBersih.split(/\s+/).filter(function(w) { return w.length >= 2; });
   
   if (words.length === 0) return DATA_BARANG.slice(0, maxResults);
   
@@ -519,18 +519,44 @@ function cariRelevan(pertanyaan, maxResults) {
     const namaBersih = bersihkanTeks(item.nama);
     const merekBersih = bersihkanTeks(item.merek);
     const jenisBersih = bersihkanTeks(item.jenis);
+    const namaWords = namaBersih.split(/\s+/);
     
     words.forEach(function(w) {
+      // Exact match
       if (namaBersih.indexOf(w) >= 0) score += 10;
       if (merekBersih.indexOf(w) >= 0) score += 8;
       if (jenisBersih.indexOf(w) >= 0) score += 6;
       if (item.kode.indexOf(w) >= 0) score += 15;
+      
+      // Fuzzy match per kata
+      for (let i = 0; i < namaWords.length; i++) {
+        if (kataMirip(w, namaWords[i])) {
+          score += 5;
+          break;
+        }
+      }
     });
     
     if (score > 0) scored.push({ item: item, score: score });
   });
   
   scored.sort(function(a, b) { return b.score - a.score; });
+  
+  // Kalau hasil sedikit, tambah hasil dari fuzzy yang lebih longgar
+  if (scored.length < 5) {
+    const tambahan = [];
+    DATA_BARANG.forEach(function(item) {
+      if (scored.find(function(s) { return s.item.kode === item.kode; })) return;
+      const namaBersih = bersihkanTeks(item.nama);
+      words.forEach(function(w) {
+        if (w.length >= 3 && namaBersih.indexOf(w.substring(0, 3)) >= 0) {
+          tambahan.push({ item: item, score: 2 });
+        }
+      });
+    });
+    scored.push(...tambahan.slice(0, 10));
+  }
+  
   return scored.slice(0, maxResults).map(function(s) { return s.item; });
 }
 
@@ -561,83 +587,117 @@ function formatBarangUntukAI(items) {
 async function aiChatBarang(pertanyaan, sender) {
   try {
     // Cari barang relevan untuk context
-    const relevantItems = cariRelevan(pertanyaan, 30);
+    let relevantItems = cariRelevan(pertanyaan, 50);
     
+    // Kalau gak ada hasil relevan, ambil 50 barang random sebagai context
     if (relevantItems.length === 0) {
-      return null; // Tidak ada data, biar bot pakai response default
+      log.warn('AI_CHAT', 'Tidak ada barang relevan, pakai context kosong');
+      relevantItems = [];
     }
     
-    const context = formatBarangUntukAI(relevantItems);
+    const context = relevantItems.length > 0 
+      ? formatBarangUntukAI(relevantItems)
+      : '(Tidak ada barang yang cocok dengan kata kunci di database)';
+    
     const nama = getNama(sender);
     const sapaan = nama ? nama : 'kakak';
+    const totalBarang = DATA_BARANG.length;
     
-    const prompt = `Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.
+    const prompt = 'Kamu adalah asisten AI toko perabot bernama "Bot Perabot". Kamu ramah, helpful, dan jawab dengan bahasa Indonesia santai.\n\n' +
+      'Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM (TDM), Perabot Mama Oesapa (Oesapa), Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).\n' +
+      'Total database ada ' + totalBarang + ' barang.\n\n' +
+      'DATA BARANG YANG RELEVAN DENGAN PERTANYAAN (' + relevantItems.length + ' item):\n' +
+      context + '\n\n' +
+      'PERTANYAAN USER (' + sapaan + '):\n' +
+      '"' + pertanyaan + '"\n\n' +
+      'ATURAN MENJAWAB:\n' +
+      '1. Jawab ramah dan natural, panggil user dengan "' + sapaan + '"\n' +
+      '2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)\n' +
+      '3. Format harga: Rp 1.000.000 (pakai titik)\n' +
+      '4. Kalau bandingkan toko, gunakan format yang mudah dibaca\n' +
+      '5. Kalau stok kosong, sebutkan dengan jelas ⚠️\n' +
+      '6. Pakai *bold* untuk teks penting (WhatsApp format)\n' +
+      '7. Maksimal 1500 karakter\n' +
+      '8. PENTING: Kalau di data tidak ada barang yang cocok, JANGAN bilang "tidak menemukan informasi". Sebagai gantinya:\n' +
+      '   - Tampilkan barang yang MIRIP dengan kata kunci dari data di atas\n' +
+      '   - Beri saran kata kunci alternatif\n' +
+      '   - Tawarkan untuk mencari dengan kata lain\n' +
+      '9. Selalu berikan jawaban yang berguna, walaupun data terbatas\n' +
+      '10. Akhiri dengan tawaran bantuan ("Ada yang ingin ditanyakan lagi?" atau "Mau dicarikan yang lain?")\n\n' +
+      'Jawab pertanyaan user sekarang dengan ramah dan helpful:';
 
-Saya punya 5 toko: Nasional Kitchen (NK), Perabot Mama TDM, Perabot Mama Oesapa, Perabot Mamaku Kefamenanu (Kefa), dan Central Perabot (CP).
-
-DATA BARANG YANG RELEVAN DENGAN PERTANYAAN:
-${context}
-
-PERTANYAAN USER (${sapaan}):
-"${pertanyaan}"
-
-ATURAN MENJAWAB:
-1. Jawab dengan ramah dan natural, panggil user dengan "${sapaan}"
-2. Gunakan emoji yang sesuai (📦 🏷️ 💰 🏪 ✅ ⚠️ dll)
-3. Format harga: Rp 1.000.000 (pakai titik)
-4. Kalau bandingkan toko, gunakan format yang mudah dibaca
-5. Kalau stok kosong, sebutkan dengan jelas ⚠️
-6. Kalau ada banyak barang, prioritaskan yang paling relevan (max 5-10)
-7. Akhiri dengan tawaran bantuan ("Ada yang ingin ditanyakan lagi?")
-8. JANGAN buat informasi yang tidak ada di data
-9. Kalau data tidak cukup, bilang "Maaf, saya tidak menemukan info tersebut di database"
-10. Pakai *bold* untuk teks penting (WhatsApp format)
-11. Maksimal 1500 karakter
-
-Jawab pertanyaan user dengan tepat berdasarkan data di atas:`;
-
+    log.info('AI_CHAT', 'Kirim ke Gemini, context: ' + relevantItems.length + ' items');
+    
     const resp = await axios.post(geminiUrl(), {
       contents: [{ parts: [{ text: prompt }] }],
     }, { timeout: 30000 });
     
     const jawaban = resp.data.candidates[0].content.parts[0].text || '';
+    log.info('AI_CHAT', 'Jawaban length: ' + jawaban.length);
+    
+    if (!jawaban || jawaban.trim().length < 10) {
+      return null;
+    }
+    
     return jawaban.trim();
     
   } catch (err) {
-    log.error('AI_CHAT', 'Gagal', err.message);
+    log.error('AI_CHAT', 'Gagal: ' + err.message);
+    if (err.response) {
+      log.error('AI_CHAT', 'Response: ' + JSON.stringify(err.response.data).substring(0, 200));
+    }
     return null;
   }
 }
 
 // Cek apakah pesan adalah pertanyaan tentang barang
 function isPertanyaanBarang(low) {
-  // Kata kunci yang menandakan pertanyaan tentang barang
-  const KATA_BARANG = [
+  // Kata kerja/tanya yang umum
+  const KATA_TANYA = [
     'stok', 'stock', 'harga', 'price', 'berapa', 'ada gak', 'ada ga', 'ada kah',
-    'apakah ada', 'masih ada', 'bandingkan', 'banding', 'compare',
-    'rekomendasi', 'rekomen', 'sarankan', 'rekomen',
+    'apakah ada', 'masih ada', 'bandingkan', 'banding', 'compare', 'samakan',
+    'rekomendasi', 'rekomen', 'sarankan', 'saran',
     'termurah', 'termahal', 'paling murah', 'paling mahal',
-    'kosong', 'habis', 'tersedia',
-    'cek', 'check', 'lihat',
+    'kosong', 'habis', 'tersedia', 'tersisa',
+    'cek', 'check', 'lihat', 'tampilkan',
     'total', 'jumlah', 'berapa banyak',
+    'cari', 'mencari', 'mau', 'butuh', 'perlu',
+    'info', 'detail', 'data',
   ];
   
-  // Kata kunci nama barang umum
+  // Kata kunci barang umum
   const KATA_BARANG_UMUM = [
-    'panci', 'dandang', 'wajan', 'rice cooker', 'kompor',
-    'gelas', 'piring', 'mangkok', 'sendok', 'garpu',
-    'eagle', 'maxim', 'sunkist', 'golden', 'paramount',
-    'aluminium', 'alm', 'stainless', 'plastik',
+    'panci', 'dandang', 'wajan', 'penggorengan', 'rice cooker', 'kompor', 'konpor',
+    'gelas', 'piring', 'mangkok', 'sendok', 'garpu', 'pisau',
+    'eagle', 'maxim', 'sunkist', 'golden', 'paramount', 'hock', 'sunlife', 'miyako',
+    'aluminium', 'alm', 'stainless', 'plastik', 'kaca', 'keramik',
+    'kursi', 'meja', 'lemari', 'rak',
+    'sumbu', 'minyak', 'gas',
+    'tl', 'serbaguna', 'susu',
+    'jar', 'drink', 'keranjang',
+    'periuk', 'panci tl',
   ];
   
-  const adaKataTanya = KATA_BARANG.some(function(k) { return low.indexOf(k) >= 0; });
+  // Kata kunci toko
+  const KATA_TOKO = ['nk', 'tdm', 'oesapa', 'kefa', 'cp', 'nasional', 'central', 'mama', 'mamaku', 'kefamenanu'];
+  
+  const adaKataTanya = KATA_TANYA.some(function(k) { return low.indexOf(k) >= 0; });
   const adaKataBarang = KATA_BARANG_UMUM.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaKataToko = KATA_TOKO.some(function(k) { return low.indexOf(k) >= 0; });
   
   // Anggap pertanyaan barang kalau:
-  // - Ada kata tanya + kata barang
-  // - ATAU pesan panjang (> 4 kata) yang mengandung kata barang
-  return (adaKataTanya && (adaKataBarang || low.length > 15)) ||
-         (low.split(/\s+/).length >= 4 && adaKataBarang);
+  // - Ada kata tanya + ada kata barang/toko
+  // - ATAU pesan punya kata barang + nama toko
+  // - ATAU pesan panjang (>4 kata) + ada kata barang
+  // - ATAU mengandung kode barang (NN diikuti angka)
+  const adaKodeBarang = /nn\d{4,5}/i.test(low);
+  const jumlahKata = low.split(/\s+/).length;
+  
+  return adaKodeBarang ||
+         (adaKataTanya && adaKataBarang) ||
+         (adaKataTanya && adaKataToko) ||
+         (adaKataBarang && adaKataToko) ||
+         (jumlahKata >= 4 && adaKataBarang);
 }
 
 function buatPromptAI(menuType, namaToko, tanggal, tokoKode) {
@@ -1536,8 +1596,8 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ★★★ AI CHAT BARANG (hanya kalau tidak sedang dalam sesi/wizard) ★★★
-    if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length > 10) {
+        // ★★★ AI CHAT BARANG ★★★
+    if (!_lagiInput && isMember(sender) && isPertanyaanBarang(low) && msg.length >= 5) {
       log.info('AI_CHAT', sender + ' tanya: ' + msg.substring(0, 80));
       await kirimWA(sender, '🤖 _Sedang berpikir..._');
       
@@ -1546,15 +1606,45 @@ app.post('/webhook', async function(req, res) {
         if (jawaban) {
           await kirimWA(sender, '🤖 ' + jawaban);
         } else {
-          await kirimWA(sender, '🤔 Maaf, saya tidak menemukan informasi tersebut.\n\nCoba ketik *menu* untuk fitur lain, atau pertanyaan yang lebih spesifik.');
+          // Fallback: pakai cari biasa
+          log.warn('AI_CHAT', 'AI return null, fallback ke cari biasa');
+          const hasil = cariBarang(msg);
+          if (hasil.hasil && hasil.hasil.length > 0) {
+            await kirimWA(sender, '🤖 Saya cari barang yang mirip ya:\n\n' + 
+              'Coba pakai menu *4* (Cari Barang) untuk hasil lebih lengkap, atau lihat di bawah:');
+            await tunggu(500);
+            
+            let resp = '📦 *Hasil Pencarian:*\n' + GARIS_TEBAL + '\n\n';
+            hasil.hasil.slice(0, 5).forEach(function(d, i) {
+              resp += '*' + (i + 1) + '.* ' + d.nama + '\n';
+              resp += '   🔖 ' + d.kode + '\n';
+              resp += '   💰 NK: ' + fRp(d.harga.nk.ecer) + ' | TDM: ' + fRp(d.harga.tdm.ecer) + '\n';
+              resp += '   💰 Oesapa: ' + fRp(d.harga.oesapa.ecer) + ' | Kefa: ' + fRp(d.harga.kefa.ecer) + '\n';
+              resp += '   💰 CP: ' + fRp(d.harga.cp.ecer) + '\n\n';
+            });
+            await kirimWA(sender, resp);
+          } else if (hasil.saran && hasil.saran.length > 0) {
+            let resp = '🤔 Maaf, tidak nemu yang persis. Mungkin yang dimaksud:\n\n';
+            hasil.saran.slice(0, 5).forEach(function(d, i) {
+              resp += '*' + (i + 1) + '.* ' + d.nama + ' (' + d.kode + ')\n';
+            });
+            resp += '\n💡 Coba ketik kata kunci lain atau kode barangnya.';
+            await kirimWA(sender, resp);
+          } else {
+            await kirimWA(sender, '🤔 Maaf, saya tidak menemukan barang dengan kata kunci tersebut.\n\n' +
+              '💡 *Coba:*\n' +
+              '• Pakai kata kunci lebih singkat (contoh: "kompor" bukan "konpor hock 22")\n' +
+              '• Cek ejaan barang\n' +
+              '• Atau ketik *menu* → pilih *4* untuk cari manual');
+          }
         }
       } catch (e) {
-        log.error('AI_CHAT', 'Error', e.message);
+        log.error('AI_CHAT', 'Error: ' + e.message);
         await kirimWA(sender, '⚠️ Sistem AI sedang sibuk. Coba lagi sebentar atau ketik *menu*.');
       }
       return;
     }
-
+    
     const s = getSesi(sender);
     
     // ── ADMIN MODE INPUT ──
