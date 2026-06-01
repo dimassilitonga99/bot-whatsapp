@@ -1434,7 +1434,7 @@ function formatHasil(searchResult, tokoKode, sender) {
     let msg = '🏷️ *Detail Barang*\n🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
     msg += '🔖 *Kode*: ' + d.kode + '\n📦 *Nama*: ' + d.nama + '\n';
     msg += '🏷️ *Jenis*: ' + (d.jenis || '-') + '\n🏗️ *Merek*: ' + (d.merek || '-') + '\n📏 *Satuan*: ' + d.satuan + '\n' + GARIS_TEBAL + '\n';
-    msg += '💰 *Ecer*: ' + fRp(h.ecer) + '\n💰 *Ambil*: ' + fRp(h.ambil) + '\n📊 *Stok*: ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n' + GARIS_TEBAL;
+    msg += '💰 *Ecer (1-5 Pcs)*: ' + fRp(h.ecer) + '\n💰 *Ambil (6 Pcs Keatas)*: ' + fRp(h.ambil) + '\n📊 *Stok*: ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n' + GARIS_TEBAL;
     if (tipeHasil === 'fuzzy') msg += '\n\n💡 _Hasil koreksi otomatis_';
     return msg + suffix;
   }
@@ -1442,7 +1442,7 @@ function formatHasil(searchResult, tokoKode, sender) {
   let msg = header + '🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
   items.forEach(function(d, i) {
     const h = d.harga[tokoKode];
-    msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | 💰 Ecer: ' + fRp(h.ecer) + ' | 📊 ' + (h.stok > 0 ? h.stok : '⚠️ Kosong') + '\n';
+    msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | 💰 Ecer (1-5 Pcs): ' + fRp(h.ecer) + ' | 📊 ' + (h.stok > 0 ? h.stok : '⚠️ Kosong') + '\n';
     if (i < items.length - 1) msg += GARIS_TIPIS + '\n';
   });
   msg += GARIS_TEBAL;
