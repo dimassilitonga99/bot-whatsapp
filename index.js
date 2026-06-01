@@ -1013,7 +1013,12 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
     filterInfo = '\nUSER MENANYAKAN TOKO: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + '. JAWAB HANYA TOKO ITU!\n';
   }
   
-  const prompt = 'Kamu asisten AI toko perabot "Bot Perabot". Ramah, bahasa Indonesia santai.\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n' +
+    const bahasa = getBahasaUser(sender);
+  let bahasaInstruction = '';
+  if (bahasa === 'en') bahasaInstruction = '\n⚠️ USER BERBICARA BAHASA INGGRIS. JAWAB DALAM BAHASA INGGRIS!\n';
+  else if (bahasa === 'kupang') bahasaInstruction = '\n⚠️ USER BERBICARA BAHASA KUPANG/NTT. JAWAB PAKAI BAHASA KUPANG SANTAI (campuran Indonesia-Kupang, pakai kata: beta, bos, su, dong, dia punya, kasi, tra ada, dll)!\n';
+  
+  const prompt='Kamu asisten AI toko perabot "Bot Perabot". Ramah, helpful.' + bahasaInstruction + '\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji sesuai\n3. Harga: Rp 1.000.000\n4. *bold* penting\n5. Max 1500 char\n6. Patuhi konteks toko!\n7. SELALU tampilkan harga Ecer(1-5 Pcs) + Ambil(6 Pcs+) walau stok KOSONG!\n8. Akhiri tawaran bantuan\n' + (bahasa === 'en' ? '9. ANSWER IN ENGLISH!\n' : bahasa === 'kupang' ? '9. JAWAB PAKAI BAHASA KUPANG!\n' : '') + 'Jawab:';\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n' +
     filterInfo + '\nDATA (' + relevantItems.length + ' item):\n' + context + '\n' +
     'PERTANYAAN (' + sapaan + '): "' + pertanyaan + '"\n\n' +
     'ATURAN:\n1. Panggil "' + sapaan + '"\n2. Emoji sesuai\n3. Harga: Rp 1.000.000\n4. *bold* penting\n5. Max 1500 char\n' +
@@ -1150,8 +1155,11 @@ function isSapaan(low) {
 const KATA_TERIMAKASIH = ['terima kasih','terimakasih','makasih','thanks','thank you','thx','tq','ty','tengkyu','mksh','trims'];
 function isTerimakasih(low) { return KATA_TERIMAKASIH.some(function(k) { return cocokKata(low, k); }); }
 
-function balasSapaanPintar(sender, kataSapaan) {
-  const nama = getNama(sender);
+function balasSapaanPintar(sender,kataSapaan){const nama=getNama(sender);const bahasa=getBahasaUser(sender);
+  // English greeting
+  if(bahasa==='en'){const greetEN=['Hello','Hi there','Hey'];const p=greetEN[Math.floor(Math.random()*greetEN.length)];return p+(nama?', *'+nama+'*':'')+'! 😊\n\nHow can I help you today?';}
+  // Kupang greeting
+  if(bahasa==='kupang'){const greetKP=['Haloo bos','Oi','Eh halo'];const p=greetKP[Math.floor(Math.random()*greetKP.length)];return p+(nama?' *'+nama+'*':'')+'! 😊\n\nAda yang beta bisa bantu?';}
   const waktu = getWaktu();
   const dataSapa = SAPAAN_MAP[kataSapaan];
   if (!dataSapa) return (nama ? 'Halo, *' + nama + '*! 😊' : 'Halo! 😊');
@@ -1166,14 +1174,20 @@ function balasSapaanPintar(sender, kataSapaan) {
   return respon;
 }
 
-function sapaanPertama(sender) {
-  const nama = getNama(sender);
-  const waktu = getWaktu();
-  const motiv = KALIMAT_MOTIVASI[Math.floor(Math.random() * KALIMAT_MOTIVASI.length)];
-  const kabar = TANYA_KABAR[Math.floor(Math.random() * TANYA_KABAR.length)];
-  const sambutan = ['Selamat ' + waktu, 'Halo, selamat ' + waktu, 'Hai'];
-  const sapa = sambutan[Math.floor(Math.random() * sambutan.length)];
-  return sapa + (nama ? ', *' + nama + '*' : '') + '! 👋\n\n' + motiv + '\n\n' + kabar;
+function sapaanPertama(sender){
+  const nama=getNama(sender);const waktu=getWaktu();
+  const bahasa=getBahasaUser(sender);
+  const motiv=KALIMAT_MOTIVASI[Math.floor(Math.random()*KALIMAT_MOTIVASI.length)];
+  
+  if(bahasa==='en'){
+    return'Hello'+(nama?', *'+nama+'*':'')+'! 👋\n\n'+motiv+'\n\nHow are you doing today? 😊';
+  }
+  if(bahasa==='kupang'){
+    return'Haloo bos'+(nama?' *'+nama+'*':'')+'! 👋\n\n'+motiv+'\n\nBagaimana kabar bos hari ini? 😊';
+  }
+  
+  const sapa=['Selamat '+waktu,'Halo','Hai'][Math.floor(Math.random()*3)];
+  return sapa+(nama?', *'+nama+'*':'')+'! 👋\n\n'+motiv+'\n\n'+TANYA_KABAR[Math.floor(Math.random()*TANYA_KABAR.length)];
 }
 
 function sapaanBerikutnya(sender, kataSapaan) {
@@ -1190,6 +1204,79 @@ function balasTerimakasih(sender) {
   const n = nama ? ', *' + nama + '*' : '';
   const opsi = ['Sama-sama' + n + '! 😊', 'Dengan senang hati' + n + '! 😊', 'Tentu' + n + '! 😊', 'Senang bisa membantu' + n + '! ✨'];
   return opsi[Math.floor(Math.random() * opsi.length)];
+}
+
+// ═══ MULTI-BAHASA ═══
+function deteksiBahasa(low) {
+  // English keywords
+  const EN = ['how much','how many','what is','where is','price','stock','check','find','search','compare','cheapest','expensive','available','please','thank you','thanks','hello','good morning','good afternoon','good evening','good night','yes','no','okay'];
+  // Kupang/NTT keywords
+  const KP = ['beta','su','dong','ko','sa','bos','kaka','om','tante','dia punya','dia pe','baku','kas','mau tau','ada ka','brapa','barapa','kasi tau','tolong kasi','bagaimana','di mana','kapan','sapa yang','seng','trada','tra ada','sampe','sandiri','bale','pulang','biar','bilang','cuma','sadiki','banyak sakali'];
+  
+  const adaEN = EN.some(function(k) { return low.indexOf(k) >= 0; });
+  const adaKP = KP.some(function(k) { return low.indexOf(k) >= 0; });
+  
+  if (adaEN && !adaKP) return 'en';
+  if (adaKP && !adaEN) return 'kupang';
+  if (adaEN && adaKP) return 'kupang'; // Kupang campur English = Kupang
+  return 'id'; // Default Indonesia
+}
+
+// Template sapaan per bahasa
+const SAPAAN_BAHASA = {
+  id: {
+    halo: ['Halo', 'Hai', 'Haloo'],
+    kabar: 'Bagaimana kabarnya? 😊',
+    bantu: 'Ada yang bisa saya bantu?',
+    menu: 'Ketik *menu* untuk lihat pilihan',
+    tanya: 'Ada yang ingin ditanyakan lagi?',
+    terimakasih: 'Sama-sama! 😊',
+    tidakmengerti: 'Maaf, saya tidak mengerti.',
+    aksesditolak: 'Menu Laporan hanya untuk staff ditunjuk.',
+    stokKosong: 'Stok kosong',
+    semogaMembantu: 'Semoga membantu! 😊',
+  },
+  en: {
+    halo: ['Hello', 'Hi', 'Hey there'],
+    kabar: 'How are you doing? 😊',
+    bantu: 'How can I help you?',
+    menu: 'Type *menu* to see options',
+    tanya: 'Anything else you want to ask?',
+    terimakasih: 'You\'re welcome! 😊',
+    tidakmengerti: 'Sorry, I don\'t understand.',
+    aksesditolak: 'Report menu is only for designated staff.',
+    stokKosong: 'Out of stock',
+    semogaMembantu: 'Hope this helps! 😊',
+  },
+  kupang: {
+    halo: ['Haloo bos', 'Oi', 'Eh halo'],
+    kabar: 'Bagaimana kabar bos? 😊',
+    bantu: 'Ada yang beta bisa bantu?',
+    menu: 'Ketik *menu* untuk liat pilihan',
+    tanya: 'Mau tanya apa lagi bos?',
+    terimakasih: 'Iya sama-sama bos! 😊',
+    tidakmengerti: 'Aduh bos, beta seng mengerti.',
+    aksesditolak: 'Menu Laporan cuma untuk staff yang su ditunjuk.',
+    stokKosong: 'Stok su abis',
+    semogaMembantu: 'Semoga membantu bos! 😊',
+  },
+};
+
+function getBahasaUser(sender) {
+  // Cek apakah ada preferensi bahasa tersimpan
+  const sesi = SESI[sender] || {};
+  return sesi._bahasa || 'id';
+}
+
+function setBahasaUser(sender, bahasa) {
+  if (!SESI[sender]) SESI[sender] = {};
+  SESI[sender]._bahasa = bahasa;
+}
+
+function teks(sender, key) {
+  const bahasa = getBahasaUser(sender);
+  const template = SAPAAN_BAHASA[bahasa] || SAPAAN_BAHASA.id;
+  return template[key] || SAPAAN_BAHASA.id[key] || key;
 }
 
 function isAdminCommand(low) {
@@ -1699,6 +1786,10 @@ app.post('/webhook', async function(req, res) {
     const _lagiInput = (_s.menu && (_s.kemarin !== undefined && _s.kemarin !== null)) || _s.wizardActive || _s.scanActive;
 
     // ── RESET ──
+        // ★ GANTI BAHASA MANUAL ★
+    if(low==='english'||low==='bahasa inggris'||low==='en'){setBahasaUser(sender,'en');await kirimWA(sender,'🌐 Language set to *English*\n\nType *menu* to see options.');return;}
+    if(low==='indonesia'||low==='bahasa indonesia'||low==='id'){setBahasaUser(sender,'id');await kirimWA(sender,'🌐 Bahasa diset ke *Indonesia*\n\nKetik *menu* untuk lihat pilihan.');return;}
+    if(low==='kupang'||low==='bahasa kupang'||low==='ntt'){setBahasaUser(sender,'kupang');await kirimWA(sender,'🌐 Bahasa su diset ke *Kupang* bos!\n\nKetik *menu* untuk liat pilihan.');return;}
     if (KATA_RESET.indexOf(low) >= 0 || (low === '0' && !_lagiInput)) {
       resetSesi(sender);
       await kirimWA(sender, getMenuUtama(sender));
@@ -1719,6 +1810,14 @@ app.post('/webhook', async function(req, res) {
     }
 
     const s = getSesi(sender);
+        // ★ DETEKSI BAHASA USER ★
+    if (msg.length >= 3) {
+      const bahasaTerdeteksi = deteksiBahasa(low);
+      if (bahasaTerdeteksi !== 'id') {
+        setBahasaUser(sender, bahasaTerdeteksi);
+        log.info('BAHASA', sender + ' → ' + bahasaTerdeteksi);
+      }
+    }
 
     // ════════════════════════════════════════════════════════════
     //   ★★★ SCAN FOTO MODE ★★★
