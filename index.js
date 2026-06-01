@@ -981,51 +981,26 @@ function cariRelevan(pertanyaan, maxResults) {
   return scored.slice(0, maxResults).map(function(s) { return s.item; });
 }
 
-async function aiChatBarang(pertanyaan, sender, tokoAktif) {
-  let relevantItems = cariRelevan(pertanyaan, 30);
-  let tokoFilter = [];
-  if (tokoAktif) {
-    const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
-    if (tokoObj) tokoFilter = [tokoObj];
-  } else {
-    tokoFilter = deteksiTokoDariTeks(pertanyaan.toLowerCase());
-  }
-  let context = '';
-  if (relevantItems.length > 0) {
-    relevantItems.forEach(function(d, i) {
-      context += (i + 1) + '. Kode: ' + d.kode + ' | Nama: ' + d.nama + ' | Satuan: ' + d.satuan + '\n';
-      const tokoShow = tokoFilter.length > 0 ? tokoFilter : TOKO_LIST;
-      tokoShow.forEach(function(t) {
-        const h = d.harga[t.kode];
-        context += '   - ' + t.nama + ': Ecer Rp' + h.ecer.toLocaleString('id-ID') + ', Ambil Rp' + h.ambil.toLocaleString('id-ID') + ', Stok: ' + (h.stok > 0 ? h.stok : 'KOSONG') + '\n';
-      });
-      context += '\n';
-    });
-  } else context = '(Tidak ada barang cocok)';
-  
-  const nama = getNama(sender);
-  const sapaan = nama ? nama : 'kakak';
-  let filterInfo = '';
-  if (tokoAktif) {
-    const tokoObj = TOKO_LIST.find(function(t) { return t.kode === tokoAktif; });
-    if (tokoObj) filterInfo = '\n⚠️ KONTEKS: User di MODE CARI di *' + tokoObj.nama + '*. JAWAB HANYA UNTUK TOKO INI!\n';
-  } else if (tokoFilter.length > 0 && tokoFilter.length < TOKO_LIST.length) {
-    filterInfo = '\nUSER MENANYAKAN TOKO: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + '. JAWAB HANYA TOKO ITU!\n';
-  }
-  
-        const bahasa=getBahasaUser(sender);
+async function aiChatBarang(pertanyaan,sender,tokoAktif){
+  var ri=cariRelevan(pertanyaan,30);
+  var tf=[];
+  if(tokoAktif){var toObj=TOKO_LIST.find(function(t){return t.kode===tokoAktif;});if(toObj)tf=[toObj];}
+  else tf=deteksiTokoDariTeks(pertanyaan.toLowerCase());
+  var ctx='';
+  if(ri.length>0){ri.forEach(function(d,i){ctx+=(i+1)+'. '+d.kode+' | '+d.nama+' | '+d.satuan+'\n';var ts=tf.length>0?tf:TOKO_LIST;ts.forEach(function(t){var h=d.harga[t.kode];ctx+='   - '+t.nama+': Ecer Rp'+h.ecer.toLocaleString('id-ID')+', Ambil Rp'+h.ambil.toLocaleString('id-ID')+', Stok:'+(h.stok>0?h.stok:'KOSONG')+'\n';});ctx+='\n';});}else ctx='(Tidak ada data)';
+  var nama=getNama(sender);var sapaan=nama?nama:'kakak';
+  var bahasa=getBahasaUser(sender);
   var bi='';
   if(bahasa==='en')bi='\nANSWER IN ENGLISH!\n';
   else if(bahasa==='kupang')bi='\nJAWAB PAKAI BAHASA KUPANG (beta, bos, su, dong, dia punya)!\n';
-        var fi2='';
-  if(tokoAktif){var toObj=TOKO_LIST.find(function(t){return t.kode===tokoAktif;});if(toObj)fi2='\nUser di toko '+toObj.nama+'. JAWAB HANYA TOKO INI!\n';}
-  else if(tokoFilter&&tokoFilter.length>0&&tokoFilter.length<TOKO_LIST.length)fi2='\nUser tanya toko: '+tokoFilter.map(function(t){return t.nama;}).join(', ')+'.\n';
-  const prompt='Kamu asisten AI toko perabot. Ramah, helpful.'+bi+'\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi2+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji\n3. Harga: Rp 1.000.000\n4. *bold*\n5. Max 1500 char\n6. Patuhi konteks toko\n7. SELALU tampilkan harga Ecer + Ambil walau stok KOSONG\n8. Akhiri tawaran bantuan\nJawab:';
-  const result = await chatAI(prompt);
-  if (result && result.jawaban) return result.jawaban;
+  var fi2='';
+  if(tokoAktif){var to2=TOKO_LIST.find(function(t){return t.kode===tokoAktif;});if(to2)fi2='\nUser di toko '+to2.nama+'. JAWAB HANYA TOKO INI!\n';}
+  else if(tf.length>0&&tf.length<TOKO_LIST.length)fi2='\nUser tanya toko: '+tf.map(function(t){return t.nama;}).join(', ')+'.\n';
+  var prompt='Kamu asisten AI toko perabot. Ramah, helpful.'+bi+'\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi2+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji\n3. Harga: Rp 1.000.000\n4. *bold*\n5. Max 1500 char\n6. Patuhi konteks toko\n7. SELALU tampilkan harga Ecer(1-5 Pcs) + Ambil(6 Pcs Keatas) walau stok KOSONG\n8. Akhiri tawaran bantuan\nJawab:';
+  var result=await chatAI(prompt);
+  if(result&&result.jawaban)return result.jawaban;
   return null;
 }
-
 function isPertanyaanBarang(low) {
   const KATA_TANYA = ['stok','stock','harga','price','berapa','ada gak','ada ga','ada kah','apakah ada','masih ada','rekomendasi','rekomen','sarankan','saran','kosong','habis','tersedia','cek','check','lihat','tampilkan','total','jumlah','cari','mencari','mau','butuh','info','detail','data'];
   const KATA_BARANG = ['panci','dandang','wajan','penggorengan','rice cooker','kompor','konpor','gelas','piring','mangkok','sendok','garpu','pisau','eagle','maxim','sunkist','golden','paramount','hock','sunlife','miyako','aluminium','alm','stainless','plastik','kaca','keramik','kursi','meja','lemari','rak','sumbu','minyak','gas','tl','serbaguna','susu','jar','drink','keranjang','periuk','magic','com','mcm'];
