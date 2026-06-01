@@ -227,21 +227,19 @@ function parseScanMulti(aiResponse, fields) {
   return hasil;
 }
 
-const DEFAULT_MEMBERS = [
-  '6285253949803','6285737005301','6285211988252','6281383924057',
-  '6282235572821','6287841617474','6281584937710'
-];
+const DEFAULT_MEMBERS=['6285253949803','6285737005301','6285211988252','6281383924057','6282235572821','6287841617474','6281584937710','6281238774152','6282266026564'];
 
-const DEFAULT_KONTAK = {
-  '6285253949803': 'Pak Security Marthen',
-  '6285737005301': 'Kak Bagas Pacar Beda Agama',
-  '6285211988252': 'Kak Admin Marketplace',
-  '6281383924057': 'Kak Fajar (Buka Mas Fajar Kefa)',
-  '6282235572821': 'Kak yang Saya Tidak Tau Namanya',
-  '6287841617474': 'Mas Awin Gacor',
-  '6281584937710': 'Kak Safira',
-  '6282266026564': 'Mas Abi Mustafa',
-  '6285829278962': 'Admin'
+const DEFAULT_KONTAK={
+  '6285253949803':'Pak Security Marthen',
+  '6285737005301':'Kak Bagas Pacar Beda Agama',
+  '6285211988252':'Kak Admin Marketplace',
+  '6281383924057':'Kak Fajar (Bukan Mas Fajar Kefa)',
+  '6282235572821':'Kak yang Saya Tidak Tau Namanya',
+  '6287841617474':'Mas Awin Gacor',
+  '6281584937710':'Kak Safira',
+  '6281238774152':'Ibu Risti HRD',
+  '6282266026564':'Mas Abi Mustafa',
+  '6285829278962':'Admin'
 };
 
 // ★★★ ROLE-BASED ACCESS ★★★
@@ -250,6 +248,7 @@ const ROLE_LAPORAN = [
   '6281584937710',  // Kak Safira
   '6285211988252',  // Kak Admin Marketplace
   '6287841617474',  // Mas Awin Gacor
+  '6281238774152',  // Ibu Risti HRD
 ];
 
 function bisaAksesLaporan(nomor) {
