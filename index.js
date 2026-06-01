@@ -1283,33 +1283,26 @@ function wizardScanReview(tokoKode, dataWizard, namaToko) {
 function getMenuUtama(nomor) {
   const nama = getNama(nomor);
   const salam = nama ? '*' + nama + '*' : 'Kamu';
+  const ROLE_LAPORAN = ['6281584937710','6285211988252','6287841617474'];
+  const bisaLaporan = isAdmin(nomor) || ROLE_LAPORAN.indexOf(nomor) >= 0;
   let m = '╭━━━━━━━━━━━━━━━━━╮\n│  🤖 *BOT TOKO PERABOT*  │\n╰━━━━━━━━━━━━━━━━━╯\n\n';
   m += 'Halo ' + salam + '! 👋\nSilakan pilih menu:\n\n';
   m += '┌─────────────────────\n';
-  
-  // Menu Laporan (hanya untuk role laporan & admin)
-  if (bisaAksesLaporan(nomor)) {
+  if (bisaLaporan) {
     m += '│ ' + emojiNum(1) + ' 📊 Laporan Penjualan\n';
     m += '│ ' + emojiNum(2) + ' 🏷️ Laporan Harga Barang\n';
     m += '│ ' + emojiNum(3) + ' 🛒 Laporan Marketplace\n';
   }
-  
-  // Menu Cari (untuk semua member)
   if (isMember(nomor)) m += '│ ' + emojiNum(4) + ' 🔍 Cari Harga Barang\n';
-  
-  // Menu Admin
-  if (isAdmin(nomor)) m += '│ ' + emojiNum(9) + ' 👑 Menu Admin\n';
-  
+  if (isAdmin(nomor))  m += '│ ' + emojiNum(9) + ' 👑 Menu Admin\n';
   m += '└─────────────────────\n\n';
-  m += '💬 *Cara pilih:*\n   Ketik nomor (contoh: *' + (bisaAksesLaporan(nomor) ? '1' : '4') + '*)\n\n';
-  
+  m += '💬 *Cara pilih:*\n   Ketik nomor\n\n';
   if (isMember(nomor)) {
     m += '🤖 *Tanya AI:*\n   _"Stok dandang eagle 20 di NK?"_\n\n';
     m += '📊 *Banding Harga:*\n   _"Bandingkan harga NN00001"_';
   }
   return m;
 }
-
 function getMenuPilihToko(menuType) {
   const ic = menuType === 1 ? '📊' : menuType === 2 ? '🏷️' : menuType === 'cari' ? '🔍' : '🛒';
   const jd = menuType === 1 ? 'LAPORAN PENJUALAN' : menuType === 2 ? 'LAPORAN HARGA BARANG' : menuType === 'cari' ? 'CARI HARGA BARANG' : 'LAPORAN MARKETPLACE';
@@ -2042,7 +2035,7 @@ app.post('/webhook', async function(req, res) {
     // ── PILIH MENU ──
         if (!s.menu && !s.mode) {
       const pilihan = parsePilihanMenu(low);
-      if (pilihan === 1 || pilihan === 2) { 
+            if (pilihan === 1 || pilihan === 2) { var RL=['6281584937710','6285211988252','6287841617474']; if(!isAdmin(sender)&&RL.indexOf(sender)<0){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;} resetSesi(sender); updateSesi(sender, { menu: pilihan }); await kirimWA(sender, getMenuPilihToko(pilihan)); return; } 
         // ★ CEK AKSES LAPORAN ★
         if (!bisaAksesLaporan(sender)) {
           await kirimWA(sender, '🚫 *Akses Ditolak*\n\nMenu Laporan hanya untuk staff yang ditunjuk.\n\nSilakan gunakan menu *4* (Cari Harga) atau tanya langsung ke AI.');
@@ -2053,7 +2046,7 @@ app.post('/webhook', async function(req, res) {
         await kirimWA(sender, getMenuPilihToko(pilihan)); 
         return; 
       }
-      if (pilihan === 3) { 
+            if (pilihan === 3) { var RL=['6281584937710','6285211988252','6287841617474']; if(!isAdmin(sender)&&RL.indexOf(sender)<0){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;} resetSesi(sender); updateSesi(sender, { menu: 3 }); await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); return; }
         // ★ CEK AKSES LAPORAN ★
         if (!bisaAksesLaporan(sender)) {
           await kirimWA(sender, '🚫 *Akses Ditolak*\n\nMenu Laporan hanya untuk staff yang ditunjuk.\n\nSilakan gunakan menu *4* (Cari Harga) atau tanya langsung ke AI.');
