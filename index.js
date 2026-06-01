@@ -1013,16 +1013,11 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
     filterInfo = '\nUSER MENANYAKAN TOKO: ' + tokoFilter.map(function(t) { return t.nama; }).join(', ') + '. JAWAB HANYA TOKO ITU!\n';
   }
   
-    const bahasa = getBahasaUser(sender);
-  let bahasaInstruction = '';
-  if (bahasa === 'en') bahasaInstruction = '\n⚠️ USER BERBICARA BAHASA INGGRIS. JAWAB DALAM BAHASA INGGRIS!\n';
-  else if (bahasa === 'kupang') bahasaInstruction = '\n⚠️ USER BERBICARA BAHASA KUPANG/NTT. JAWAB PAKAI BAHASA KUPANG SANTAI (campuran Indonesia-Kupang, pakai kata: beta, bos, su, dong, dia punya, kasi, tra ada, dll)!\n';
-  
-  const prompt='Kamu asisten AI toko perabot "Bot Perabot". Ramah, helpful.' + bahasaInstruction + '\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji sesuai\n3. Harga: Rp 1.000.000\n4. *bold* penting\n5. Max 1500 char\n6. Patuhi konteks toko!\n7. SELALU tampilkan harga Ecer(1-5 Pcs) + Ambil(6 Pcs+) walau stok KOSONG!\n8. Akhiri tawaran bantuan\n' + (bahasa === 'en' ? '9. ANSWER IN ENGLISH!\n' : bahasa === 'kupang' ? '9. JAWAB PAKAI BAHASA KUPANG!\n' : '') + 'Jawab:';\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n' +
-    filterInfo + '\nDATA (' + relevantItems.length + ' item):\n' + context + '\n' +
-    'PERTANYAAN (' + sapaan + '): "' + pertanyaan + '"\n\n' +
-    'ATURAN:\n1. Panggil "' + sapaan + '"\n2. Emoji sesuai\n3. Harga: Rp 1.000.000\n4. *bold* penting\n5. Max 1500 char\n' +
-    '6. Patuhi konteks toko!\n7. ⚠️ SELALU tampilkan harga Ecer + Ambil walau stok KOSONG!\n8. Akhiri tawaran bantuan\nJawab:';
+      const bahasa=getBahasaUser(sender);
+  var bi='';
+  if(bahasa==='en')bi='\nANSWER IN ENGLISH!\n';
+  else if(bahasa==='kupang')bi='\nJAWAB PAKAI BAHASA KUPANG (beta, bos, su, dong, dia punya)!\n';
+  const prompt='Kamu asisten AI toko perabot. Ramah, helpful.'+bi+'\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji\n3. Harga: Rp 1.000.000\n4. *bold*\n5. Max 1500 char\n6. Patuhi konteks toko\n7. SELALU tampilkan harga Ecer + Ambil walau stok KOSONG\n8. Akhiri tawaran bantuan\nJawab:';
 
   const result = await chatAI(prompt);
   if (result && result.jawaban) return result.jawaban;
