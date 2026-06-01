@@ -1017,9 +1017,9 @@ async function aiChatBarang(pertanyaan, sender, tokoAktif) {
   var bi='';
   if(bahasa==='en')bi='\nANSWER IN ENGLISH!\n';
   else if(bahasa==='kupang')bi='\nJAWAB PAKAI BAHASA KUPANG (beta, bos, su, dong, dia punya)!\n';
-      var fi2='';
-  if(tokoAktif){var toObj=TOKO_LIST.find(function(t){return t.kode===tokoAktif;});if(toObj)fi2='\nKONTEKS: User di MODE CARI di '+toObj.nama+'. JAWAB HANYA TOKO INI!\n';}
-  else if(tf&&tf.length>0&&tf.length<TOKO_LIST.length)fi2='\nUSER TANYA TOKO: '+tf.map(function(t){return t.nama;}).join(', ')+'. JAWAB TOKO ITU SAJA!\n';
+        var fi2='';
+  if(tokoAktif){var toObj=TOKO_LIST.find(function(t){return t.kode===tokoAktif;});if(toObj)fi2='\nUser di toko '+toObj.nama+'. JAWAB HANYA TOKO INI!\n';}
+  else if(tokoFilter&&tokoFilter.length>0&&tokoFilter.length<TOKO_LIST.length)fi2='\nUser tanya toko: '+tokoFilter.map(function(t){return t.nama;}).join(', ')+'.\n';
   const prompt='Kamu asisten AI toko perabot. Ramah, helpful.'+bi+'\n5 toko: NK, TDM, Oesapa, Kefa, CP.\n'+fi2+'\nDATA ('+ri.length+' item):\n'+ctx+'\nPERTANYAAN ('+sapaan+'): "'+pertanyaan+'"\n\nATURAN:\n1. Panggil "'+sapaan+'"\n2. Emoji\n3. Harga: Rp 1.000.000\n4. *bold*\n5. Max 1500 char\n6. Patuhi konteks toko\n7. SELALU tampilkan harga Ecer + Ambil walau stok KOSONG\n8. Akhiri tawaran bantuan\nJawab:';
   const result = await chatAI(prompt);
   if (result && result.jawaban) return result.jawaban;
