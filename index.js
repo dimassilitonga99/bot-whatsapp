@@ -497,52 +497,143 @@ function cariBarang(keyword) {
   const qBersih = bersihkanTeks(q);
   const words = qBersih.split(/\s+/).filter(function(w) { return w.length > 0; });
   if (words.length === 0) return { hasil: [], saran: [], tipeHasil: 'kosong' };
+  
+  // 1. Exact match by kode
   const byKode = DATA_BARANG.filter(function(d) { return d.kode === q; });
   if (byKode.length > 0) return { hasil: byKode, saran: [], tipeHasil: 'exact', totalDitemukan: byKode.length };
+  
+  // 2. Exact match (SEMUA kata harus ada di nama)
   const exactResults = DATA_BARANG.filter(function(d) {
     const namaBersih = bersihkanTeks(d.nama);
     return words.every(function(w) { return namaBersih.indexOf(w) >= 0 || d.kode.indexOf(w) >= 0; });
   });
+  
   if (exactResults.length > 0) {
-    return { hasil: exactResults.slice(0, CONFIG.maxHasilCari), saran: [], tipeHasil: 'exact', totalDitemukan: exactResults.length };
+    // ★ SORT ABJAD ★
+    exactResults.sort(function(a, b) { return a.nama.localeCompare(b.nama); });
+    return { 
+      hasil: exactResults.slice(0, CONFIG.maxHasilCari), 
+      saran: [], 
+      tipeHasil: 'exact', 
+      totalDitemukan: exactResults.length 
+    };
   }
+  
+  // 3. Fuzzy search — TAPI lebih ketat
+  // Minimal 70% kata harus cocok (exact atau fuzzy per kata)
   const skorItems = [];
+  const minMatchRatio = 0.7; // Minimal 70% kata harus match
+  
   DATA_BARANG.forEach(function(item) {
-    const info = hitungSkor(item, words);
-    if (info.skor > 0 && info.totalMatch >= Math.ceil(words.length * 0.5)) {
-      skorItems.push({ item, skor: info.skor, fuzzyMatch: info.fuzzyMatch });
+    const namaBersih = bersihkanTeks(item.nama);
+    const namaWords = namaBersih.split(/\s+/);
+    
+    let matchCount = 0;
+    let totalSkor = 0;
+    
+    words.forEach(function(w) {
+      let bestMatch = 0;
+      
+      // Exact contain
+      if (namaBersih.indexOf(w) >= 0) {
+        bestMatch = 10;
+      }
+      // Kode contain
+      else if (item.kode.indexOf(w) >= 0) {
+        bestMatch = 10;
+      }
+      // Fuzzy per kata (toleransi typo)
+      else {
+        for (let i = 0; i < namaWords.length; i++) {
+          if (kataMirip(w, namaWords[i])) {
+            bestMatch = 5;
+            break;
+          }
+        }
+      }
+      
+      if (bestMatch > 0) {
+        matchCount++;
+        totalSkor += bestMatch;
+      }
+    });
+    
+    // ★ FILTER KETAT: minimal 70% kata harus match ★
+    const matchRatio = matchCount / words.length;
+    
+    if (matchRatio >= minMatchRatio && totalSkor > 0) {
+      // Bonus skor kalau semua kata match
+      if (matchCount === words.length) totalSkor += 20;
+      // Bonus kalau nama pendek (lebih spesifik)
+      if (namaBersih.split(/\s+/).length <= words.length + 3) totalSkor += 5;
+      
+      skorItems.push({ 
+        item: item, 
+        skor: totalSkor, 
+        matchRatio: matchRatio,
+        fuzzy: matchCount < words.length 
+      });
     }
   });
-  skorItems.sort(function(a, b) { return b.skor - a.skor; });
+  
+  skorItems.sort(function(a, b) { 
+    // Sort: skor tertinggi dulu, kalau sama → abjad
+    if (b.skor !== a.skor) return b.skor - a.skor;
+    return a.item.nama.localeCompare(b.item.nama);
+  });
+  
   if (skorItems.length > 0) {
     const batasSkor = skorItems[0].skor * 0.5;
     const hasilBagus = skorItems.filter(function(s) { return s.skor >= batasSkor; });
+    
+    // ★ SORT ABJAD untuk hasil akhir ★
     const hasilTerbatas = hasilBagus.slice(0, CONFIG.maxHasilCari);
-    const adaFuzzy = hasilTerbatas.some(function(s) { return s.fuzzyMatch > 0; });
+    hasilTerbatas.sort(function(a, b) { return a.item.nama.localeCompare(b.item.nama); });
+    
+    const adaFuzzy = hasilTerbatas.some(function(s) { return s.fuzzy; });
     return {
       hasil: hasilTerbatas.map(function(s) { return s.item; }),
-      saran: [], tipeHasil: adaFuzzy ? 'fuzzy' : 'exact', totalDitemukan: hasilBagus.length,
+      saran: [],
+      tipeHasil: adaFuzzy ? 'fuzzy' : 'exact',
+      totalDitemukan: hasilBagus.length,
     };
   }
+  
+  // 4. Saran — cari per kata yang paling cocok
   const saranSet = {};
   words.forEach(function(w) {
-    if (w.length < 2) return;
+    if (w.length < 3) return;
     DATA_BARANG.forEach(function(item) {
-      const namaWords = bersihkanTeks(item.nama).split(/\s+/);
-      namaWords.forEach(function(nw) {
-        if (kataMirip(w, nw) || nw.indexOf(w) >= 0 || w.indexOf(nw) >= 0) {
-          if (!saranSet[item.kode]) saranSet[item.kode] = { item, matchCount: 0 };
-          saranSet[item.kode].matchCount++;
+      const namaBersih = bersihkanTeks(item.nama);
+      const namaWords = namaBersih.split(/\s+/);
+      
+      // Hanya tambah saran kalau kata ADA di nama (exact atau mirip)
+      let cocok = false;
+      if (namaBersih.indexOf(w) >= 0) cocok = true;
+      else {
+        for (let i = 0; i < namaWords.length; i++) {
+          if (kataMirip(w, namaWords[i])) { cocok = true; break; }
         }
-      });
+      }
+      
+      if (cocok) {
+        if (!saranSet[item.kode]) saranSet[item.kode] = { item: item, matchCount: 0 };
+        saranSet[item.kode].matchCount++;
+      }
     });
   });
+  
   const saranList = Object.values(saranSet)
-    .sort(function(a, b) { return b.matchCount - a.matchCount; })
-    .slice(0, 5).map(function(s) { return s.item; });
+    .sort(function(a, b) { 
+      // Sort: paling banyak match dulu, lalu abjad
+      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+      return a.item.nama.localeCompare(b.item.nama);
+    })
+    .slice(0, 5)
+    .map(function(s) { return s.item; });
+  
   return { hasil: [], saran: saranList, tipeHasil: saranList.length > 0 ? 'saran' : 'kosong' };
 }
-
 function updateStok(kode, tokoKode, jumlah) {
   const k = kode.trim().toUpperCase();
   const item = DATA_BARANG.find(function(d) { return d.kode === k; });
