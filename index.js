@@ -2033,30 +2033,14 @@ app.post('/webhook', async function(req, res) {
     }
 
     // ── PILIH MENU ──
-        if (!s.menu && !s.mode) {
-      const pilihan = parsePilihanMenu(low);
-            if (pilihan === 1 || pilihan === 2) { var RL=['6281584937710','6285211988252','6287841617474']; if(!isAdmin(sender)&&RL.indexOf(sender)<0){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;} resetSesi(sender); updateSesi(sender, { menu: pilihan }); await kirimWA(sender, getMenuPilihToko(pilihan)); return; } 
-        // ★ CEK AKSES LAPORAN ★
-        if (!bisaAksesLaporan(sender)) {
-          await kirimWA(sender, '🚫 *Akses Ditolak*\n\nMenu Laporan hanya untuk staff yang ditunjuk.\n\nSilakan gunakan menu *4* (Cari Harga) atau tanya langsung ke AI.');
-          return;
-        }
-        resetSesi(sender);
-        updateSesi(sender, { menu: pilihan }); 
-        await kirimWA(sender, getMenuPilihToko(pilihan)); 
-        return; 
-      }
-            if (pilihan === 3) { var RL=['6281584937710','6285211988252','6287841617474']; if(!isAdmin(sender)&&RL.indexOf(sender)<0){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;} resetSesi(sender); updateSesi(sender, { menu: 3 }); await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); return; }
-        // ★ CEK AKSES LAPORAN ★
-        if (!bisaAksesLaporan(sender)) {
-          await kirimWA(sender, '🚫 *Akses Ditolak*\n\nMenu Laporan hanya untuk staff yang ditunjuk.\n\nSilakan gunakan menu *4* (Cari Harga) atau tanya langsung ke AI.');
-          return;
-        }
-        resetSesi(sender);
-        updateSesi(sender, { menu: 3 }); 
-        await kirimWA(sender, getMenuPilihHari('Marketplace Perabot Mama')); 
-        return; 
-      }
+            if(!s.menu&&!s.mode){
+      const pilihan=parsePilihanMenu(low);
+      if(pilihan===1||pilihan===2){if(!bisaAksesLaporan(sender)){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;}resetSesi(sender);updateSesi(sender,{menu:pilihan});await kirimWA(sender,getMenuPilihToko(pilihan));return;}
+      if(pilihan===3){if(!bisaAksesLaporan(sender)){await kirimWA(sender,'🚫 Menu Laporan hanya untuk staff ditunjuk.\nGunakan menu *4* atau tanya AI.');return;}resetSesi(sender);updateSesi(sender,{menu:3});await kirimWA(sender,getMenuPilihHari('Marketplace Perabot Mama'));return;}
+      if(pilihan===4){if(!isMember(sender)){await kirimWA(sender,'🚫 Hanya untuk member.');return;}resetSesi(sender);updateSesi(sender,{mode:'cari',tokoKode:null});await kirimWA(sender,getMenuPilihToko('cari'));return;}
+      if(pilihan===9){if(!isAdmin(sender)){await kirimWA(sender,'🚫 Khusus admin.');return;}resetSesi(sender);updateSesi(sender,{mode:'admin_menu'});await kirimWA(sender,getMenuAdmin());return;}
+      await kirimWA(sender,'🤔 Maaf, tidak mengerti.\n\nKetik *menu*.');return;
+    }
 
     // ── PILIH TOKO ──
     if (s.menu !== 3 && !s.toko) {
