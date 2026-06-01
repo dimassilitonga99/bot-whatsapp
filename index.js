@@ -1442,7 +1442,11 @@ function formatHasil(searchResult, tokoKode, sender) {
   let msg = header + '🏦 *' + namaToko + '*\n' + GARIS_TEBAL + '\n';
   items.forEach(function(d, i) {
     const h = d.harga[tokoKode];
-    msg += '*' + (i + 1) + '.* ' + d.nama + '\n   🔖 ' + d.kode + ' | 💰 Ecer (1-5 Pcs): ' + fRp(h.ecer) + ' | 📊 ' + (h.stok > 0 ? h.stok : '⚠️ Kosong') + '\n';
+    msg += '*' + (i + 1) + '.* ' + d.nama + '\n';
+    msg += '   🔖 ' + d.kode + ' | ' + d.satuan + '\n';
+    msg += '   💰 Ecer(1-5 Pcs): ' + fRp(h.ecer) + '\n';
+    msg += '   💰 Ambil(6 Pcs+): ' + fRp(h.ambil) + '\n';
+    msg += '   📊 Stok: ' + (h.stok > 0 ? h.stok + ' ' + d.satuan : '⚠️ Kosong') + '\n';
     if (i < items.length - 1) msg += GARIS_TIPIS + '\n';
   });
   msg += GARIS_TEBAL;
