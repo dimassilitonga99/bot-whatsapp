@@ -178,7 +178,7 @@ const SCAN_STEPS = {
     { step: 5, label: 'Total + Tunai + Debit + Credit', fields: ['total', 'tunai', 'debit', 'kredit'], scanField: 'multi' },
     { step: 6, label: 'Ecer', fields: ['ecer'], scanField: 'total_transaksi' },
     { step: 7, label: 'Grosir', fields: ['grosir'], scanField: 'total_transaksi' },
-    { step: 8, label: 'Kasir Promo (Total + Tunai + Debit + Credit)', fields: ['promo', 'promotunai', 'promodebit', 'promokredit'], scanField: 'multi_promo' },
+    { step: 8,label:'Kasir Promo (Total+Tunai+Debit+Credit)',fields:['promo','promotunai','promodebit','promokredit'],scanField:'multi'},
     { step: 9, label: 'Parkir di Komputer', fields: ['parkirkomputer'], scanField: 'manual' },
     { step: 10, label: 'Parkir Stor Luar', fields: ['parkirluar'], scanField: 'manual' },
   ],
@@ -1268,14 +1268,13 @@ function msgMintaFoto(tokoKode,stepIdx,namaToko,dataWizard){
   m+='] '+Math.round((no/total)*100)+'%\n━━━━━━━━━━━━━━━━━━\n\n';
   
   // Untuk multi-field: langsung masuk sub-field mode
-  if(si.scanField==='multi'){
+    if(si.scanField==='multi'){
     var subIdx=dataWizard._subField||0;
     var fn=si.fields[subIdx];
     m+='📋 *'+si.label+'*\n\n';
     m+='💰 Masukkan angka *'+fn.toUpperCase()+'*:\n';
     m+='   (angka atau *-* jika kosong)\n\n';
     m+='💡 Contoh: _40899000_\n\n';
-    // Progress sub-field
     m+='📊 Sub-step: '+(subIdx+1)+'/'+si.fields.length+' ('+fn+')\n';
   } else if(si.scanField==='manual'){
     m+='🅿️ *'+si.label+'*\n\n⌨️ Ketik nominal:\n   (angka atau *-* jika kosong)\n\n';
