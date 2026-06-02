@@ -1906,6 +1906,7 @@ app.post('/webhook', async function(req, res) {
           return;
         }
         } else if (msg) {
+        var si=steps[ci];
     // MANUAL ANGKA
     if (si.scanField==='manual'||si.scanField==='single'||si.fields.length===1) {
       var nom=0;
