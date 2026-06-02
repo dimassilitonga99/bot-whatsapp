@@ -2162,7 +2162,9 @@ app.post('/webhook', async function(req, res) {
         const prompt = buatPromptAI(s.menu, namaToko, getTanggal(s.kemarin), s.toko);
         laporan = await analisaGambar(image, prompt);
       } catch (e) { log.error('GEMINI', e.message); await kirimWA(sender, '❌ Gagal baca foto.'); return; }
-    } else if (msg) {
+        } else if(msg){
+      var si=steps[ci];
+      if(si.scanField==='manual'||si.scanField==='single'){
       if (s.menu === 2) laporan = genLapHarga(msg, namaToko, s.kemarin);
       if (s.menu === 3) laporan = genLapMarket(msg, s.kemarin);
     } else return;
