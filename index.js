@@ -1773,201 +1773,108 @@ app.post('/webhook', async function(req, res) {
     // ════════════════════════════════════════════════════════════
     //   ★★★ SCAN FOTO MODE ★★★
     // ════════════════════════════════════════════════════════════
-    if (s.scanActive) {
-      const scanData = s.scanData || {};
-      const currentStepIdx = s.scanStepIdx || 0;
-      const tokoKode = s.toko;
-      const namaToko = NAMA_TOKO[tokoKode];
-      const steps = SCAN_STEPS[tokoKode];
-      
-      if (!steps || currentStepIdx >= steps.length) {
-        // Semua step selesai → generate laporan
-        const text = wizardToText(scanData, tokoKode);
-        const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
-        if (laporan) {
-          await kirimWA(sender, laporan);
-          resetSesi(sender);
-          await tunggu(1500);
-          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-        }
-        return;
-      }
-      
-      const stepInfo = steps[currentStepIdx];
-      
-      // Handle review
-      if (low === 'review') {
-        await kirimWA(sender, wizardScanReview(tokoKode, scanData, namaToko));
-        return;
-      }
-      
-      // Handle selesai paksa
-      if (low === 'selesai' || low === 'finish' || low === 'done') {
-        // Isi field yang belum ada dengan 0
-        const allFields = FIELD_LAPORAN[tokoKode];
-        allFields.forEach(function(f) { if (scanData[f.key] === undefined) scanData[f.key] = 0; });
-        const text = wizardToText(scanData, tokoKode);
-        const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
-        if (laporan) {
-          await kirimWA(sender, laporan);
-          resetSesi(sender);
-          await tunggu(1500);
-          await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-        }
-        return;
-      }
-      
-      // Handle lanjut (setelah review)
-      if (low === 'lanjut' || low === 'next' || low === 'continue') {
-        await kirimWA(sender, msgMintaFoto(tokoKode, currentStepIdx, namaToko, scanData));
-        return;
-      }
-      
-      // Handle skip
-      if (low === 'skip' || low === 'lewati') {
-        stepInfo.fields.forEach(function(f) { scanData[f] = 0; });
-        const nextIdx = currentStepIdx + 1;
-        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
-        
-        if (nextIdx >= steps.length) {
-          // Semua selesai
-          const text = wizardToText(scanData, tokoKode);
-          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
-          if (laporan) {
-            await kirimWA(sender, laporan);
-            resetSesi(sender);
-            await tunggu(1500);
-            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-          }
-        } else {
-          await tunggu(300);
-          await kirimWA(sender, '⏭️ _Dilewati_\n\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
-        }
-        return;
-      }
-      
-      // ★★★ HANDLE MANUAL INPUT (untuk step parkir) ★★★
-      if (stepInfo.scanField === 'manual') {
-        let nominal = 0;
-        if (msg === '-' || low === 'kosong' || low === 'null' || low === '0') nominal = 0;
-        else {
-          const angka = msg.replace(/[^0-9]/g, '');
-          if (!angka) { await kirimWA(sender, '⚠️ Ketik angka saja atau *-* untuk kosong'); return; }
-          nominal = parseInt(angka);
-        }
-        
-        scanData[stepInfo.fields[0]] = nominal;
-        const nextIdx = currentStepIdx + 1;
-        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
-        
-        const fr = nominal === 0 ? 'Rp. -' : 'Rp. ' + nominal.toLocaleString('id-ID');
-        
-        if (nextIdx >= steps.length) {
-          // Semua selesai
-          await kirimWA(sender, '✅ _' + stepInfo.label + ': ' + fr + ' disimpan_\n\n🎉 *Semua data lengkap!*\n⏳ _Generate laporan..._');
-          await tunggu(800);
-          const text = wizardToText(scanData, tokoKode);
-          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
-          if (laporan) {
-            await kirimWA(sender, laporan);
-            resetSesi(sender);
-            await tunggu(1500);
-            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-          }
-        } else {
-          await tunggu(300);
-          await kirimWA(sender, '✅ _' + stepInfo.label + ': ' + fr + ' disimpan_\n\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
-        }
-        return;
-      }
-      
-      // ★★★ HANDLE FOTO ATAU ANGKA MANUAL ★★★
-      let hasilScan = null;
+    if(s.scanActive){
+      var sd=s.scanData||{};var ci=s.scanStepIdx||0;var tk=s.toko;var nm=NAMA_TOKO[tk];var steps=SCAN_STEPS[tk];
+      if(!steps||ci>=steps.length){var text=wizardToText(sd,tk);var lap=genLapPenjualan(text,nm,s.kemarin,tk);if(lap){await kirimWA(sender,lap);resetSesi(sender);await tunggu(1500);await kirimWA(sender,'✅ *Laporan selesai!* 😊\n\n'+getMenuUtama(sender));}return;}
       var si=steps[ci];
+      if(low==='review'){await kirimWA(sender,wizardScanReview(tk,sd,nm));return;}
+      if(low==='selesai'||low==='finish'||low==='done'){var fl=FIELD_LAPORAN[tk];fl.forEach(function(f){if(sd[f.key]===undefined)sd[f.key]=0;});var text=wizardToText(sd,tk);var lap=genLapPenjualan(text,nm,s.kemarin,tk);if(lap){await kirimWA(sender,lap);resetSesi(sender);await tunggu(1500);await kirimWA(sender,'✅ *Laporan selesai!* 😊\n\n'+getMenuUtama(sender));}return;}
+      if(low==='lanjut'||low==='next'||low==='continue'){await kirimWA(sender,msgMintaFoto(tk,ci,nm,sd));return;}
+      if(low==='skip'||low==='lewati'){si.fields.forEach(function(f){sd[f]=0;});delete sd._subField;var ni=ci+1;updateSesi(sender,{scanData:sd,scanStepIdx:ni});if(ni>=steps.length){var text=wizardToText(sd,tk);var lap=genLapPenjualan(text,nm,s.kemarin,tk);if(lap){await kirimWA(sender,lap);resetSesi(sender);await tunggu(1500);await kirimWA(sender,'✅ *Laporan selesai!* 😊\n\n'+getMenuUtama(sender));}}else{await tunggu(300);await kirimWA(sender,'⏭️ _Dilewati_\n\n'+msgMintaFoto(tk,ni,nm,sd));}return;}
+
+      // ★★★ HANDLE INPUT ANGKA ★★★
+      // Untuk SEMUA tipe field: single, multi, manual → input satu-satu
       
-      if (image && image.length > 0) {
-        // SCAN FOTO
-        await kirimWA(sender, '📸 _Scanning foto ' + stepInfo.label + '..._');
-        try {
-          const prompt = SCAN_PROMPTS[stepInfo.scanField] || SCAN_PROMPTS.total_transaksi;
-          const aiResult = await analisaGambar(image, prompt);
-          log.info('SCAN', 'AI result: ' + aiResult.substring(0, 100));
-          
-          if (stepInfo.scanField === 'total_transaksi') {
-            const angka = parseScanSingle(aiResult);
-            hasilScan = {};
-            hasilScan[stepInfo.fields[0]] = angka;
-          } else if (stepInfo.scanField === 'multi' || stepInfo.scanField === 'multi_promo') {
-            hasilScan = parseScanMulti(aiResult, stepInfo.fields);
-          }
-        } catch (e) {
-          log.error('SCAN', 'Gagal: ' + e.message);
-          await kirimWA(sender, '❌ Gagal scan foto. Coba kirim ulang atau ketik angka manual.');
+      // Tentukan field yang sedang diisi
+      var currentFieldName;
+      var isMulti = (si.scanField === 'multi');
+      
+      if(isMulti){
+        // Multi-field: pakai sub-step
+        var subIdx = sd._subField || 0;
+        currentFieldName = si.fields[subIdx];
+      } else {
+        // Single/manual: langsung field pertama
+        currentFieldName = si.fields[0];
+      }
+      
+      // Parse angka dari input user
+      var nominal = 0;
+      if(msg === '-' || low === 'kosong' || low === '0' || low === 'null'){
+        nominal = 0;
+      } else {
+        var angka = msg.replace(/[^0-9]/g, '');
+        if(!angka){
+          await kirimWA(sender, '⚠️ Ketik angka saja\n   Contoh: _15741500_\n   Atau *-* untuk kosong');
           return;
         }
-        } else if (msg) {
-        var si=steps[ci];
-    // MANUAL ANGKA
-    if (si.scanField==='manual'||si.scanField==='single'||si.fields.length===1) {
-      var nom=0;
-      if(msg==='-'||low==='kosong'||low==='0')nom=0;
-      else{var a=msg.replace(/[^0-9]/g,'');if(!a){await kirimWA(sender,'⚠️ Ketik angka atau *-*');return;}nom=parseInt(a);}
-      hasilScan={};
-      hasilScan[si.fields[0]]=nom;
-    } else if (si.scanField==='multi') {
-      // MULTI: input satu-satu
-      var subIdx2=sd._subField||0;
-      var fn2=si.fields[subIdx2];
-      var nom2=0;
-      if(msg==='-'||low==='kosong'||low==='0')nom2=0;
-      else{var a2=msg.replace(/[^0-9]/g,'');if(!a2){await kirimWA(sender,'⚠️ Ketik angka atau *-*');return;}nom2=parseInt(a2);}
-      sd[fn2]=nom2;
-      var fr3=nom2===0?'Rp. -':'Rp. '+nom2.toLocaleString('id-ID');
-      var nextSub2=subIdx2+1;
-      if(nextSub2<si.fields.length){
-        sd._subField=nextSub2;
-        updateSesi(sender,{scanData:sd});
-        await kirimWA(sender,'✅ _'+fn2+': '+fr3+'_\n\n💰 Masukkan angka *'+si.fields[nextSub2].toUpperCase()+'*:\n   (angka atau *-*)\n\n📊 Sub-step: '+(nextSub2+1)+'/'+si.fields.length);
-        return;
+        nominal = parseInt(angka);
       }
-      // Semua sub-field selesai
-      delete sd._subField;
-      hasilScan={};
-      si.fields.forEach(function(f){hasilScan[f]=sd[f]||0;});
-    }
-  }
       
-      if (hasilScan) {
-        // Simpan hasil
-        Object.keys(hasilScan).forEach(function(k) { scanData[k] = hasilScan[k]; });
-        const nextIdx = currentStepIdx + 1;
-        updateSesi(sender, { scanData: scanData, scanStepIdx: nextIdx });
+      // Simpan nilai
+      sd[currentFieldName] = nominal;
+      var formatNom = nominal === 0 ? 'Rp. -' : 'Rp. ' + nominal.toLocaleString('id-ID');
+      
+      if(isMulti){
+        // Multi-field: cek apakah masih ada sub-field berikutnya
+        var nextSubIdx = (sd._subField || 0) + 1;
         
-        // Format konfirmasi
-        let konfirmasi = '✅ *Data disimpan:*\n';
-        Object.keys(hasilScan).forEach(function(k) {
-          const v = hasilScan[k];
-          const fr = v === 0 ? 'Rp. -' : 'Rp. ' + v.toLocaleString('id-ID');
-          konfirmasi += '   • ' + k + ': ' + fr + '\n';
+        if(nextSubIdx < si.fields.length){
+          // Masih ada sub-field → tanya berikutnya
+          sd._subField = nextSubIdx;
+          updateSesi(sender, {scanData: sd});
+          var nextFieldName = si.fields[nextSubIdx];
+          await kirimWA(sender, '✅ _' + currentFieldName + ': ' + formatNom + '_\n\n💰 Masukkan angka *' + nextFieldName.toUpperCase() + '*:\n   (angka atau *-*)\n\n📊 Sub-step: ' + (nextSubIdx + 1) + '/' + si.fields.length);
+          return;
+        }
+        
+        // Semua sub-field selesai → buat hasilScan dari sd
+        delete sd._subField;
+        var hasilScan = {};
+        si.fields.forEach(function(f){ hasilScan[f] = sd[f] || 0; });
+        
+        // Lanjut ke step berikutnya
+        var nextIdx = ci + 1;
+        updateSesi(sender, {scanData: sd, scanStepIdx: nextIdx});
+        
+        var konfirmasi = '✅ *Data disimpan:*\n';
+        si.fields.forEach(function(f){
+          var v = sd[f] || 0;
+          konfirmasi += '   • ' + f + ': ' + (v === 0 ? 'Rp. -' : 'Rp. ' + v.toLocaleString('id-ID')) + '\n';
         });
         
-        if (nextIdx >= steps.length) {
-          await kirimWA(sender, konfirmasi + '\n🎉 *Semua data lengkap!*\n⏳ _Generate laporan..._');
+        if(nextIdx >= steps.length){
+          await kirimWA(sender, konfirmasi + '\n🎉 *Semua lengkap!*');
           await tunggu(800);
-          const text = wizardToText(scanData, tokoKode);
-          const laporan = genLapPenjualan(text, namaToko, s.kemarin, tokoKode);
-          if (laporan) {
-            await kirimWA(sender, laporan);
-            resetSesi(sender);
-            await tunggu(1500);
-            await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
-          }
+          var text = wizardToText(sd, tk);
+          var lap = genLapPenjualan(text, nm, s.kemarin, tk);
+          if(lap){await kirimWA(sender, lap); resetSesi(sender); await tunggu(1500); await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));}
         } else {
           await tunggu(300);
-          await kirimWA(sender, konfirmasi + '\n' + msgMintaFoto(tokoKode, nextIdx, namaToko, scanData));
+          await kirimWA(sender, konfirmasi + '\n' + msgMintaFoto(tk, nextIdx, nm, sd));
         }
+        return;
+        
+      } else {
+        // Single/manual field → langsung lanjut step berikutnya
+        var hasilScan = {};
+        hasilScan[currentFieldName] = nominal;
+        
+        var nextIdx = ci + 1;
+        updateSesi(sender, {scanData: sd, scanStepIdx: nextIdx});
+        
+        if(nextIdx >= steps.length){
+          await kirimWA(sender, '✅ _' + currentFieldName + ': ' + formatNom + '_\n\n🎉 *Semua lengkap!*');
+          await tunggu(800);
+          var text = wizardToText(sd, tk);
+          var lap = genLapPenjualan(text, nm, s.kemarin, tk);
+          if(lap){await kirimWA(sender, lap); resetSesi(sender); await tunggu(1500); await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));}
+        } else {
+          await tunggu(300);
+          await kirimWA(sender, '✅ _' + currentFieldName + ': ' + formatNom + '_\n\n' + msgMintaFoto(tk, nextIdx, nm, sd));
+        }
+        return;
       }
-      return;
     }
 
     // ════════════════════════════════════════════════════════════
