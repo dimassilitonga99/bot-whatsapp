@@ -1883,6 +1883,7 @@ app.post('/webhook', async function(req, res) {
       
       // ★★★ HANDLE FOTO ATAU ANGKA MANUAL ★★★
       let hasilScan = null;
+      var si=steps[ci];
       
       if (image && image.length > 0) {
         // SCAN FOTO
