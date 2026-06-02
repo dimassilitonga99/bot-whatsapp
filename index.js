@@ -1260,53 +1260,32 @@ function isAdminCommand(low) {
 //   13. ★★★ SCAN FOTO HELPER ★★★
 // ════════════════════════════════════════════════════════════════
 
-function msgMintaFoto(tokoKode, stepIdx, namaToko, dataWizard) {
-  const steps = SCAN_STEPS[tokoKode];
-  if (!steps || stepIdx >= steps.length) return null;
-  const stepInfo = steps[stepIdx];
-  const totalSteps = steps.length;
-  const no = stepIdx + 1;
+function msgMintaFoto(tokoKode,stepIdx,namaToko,dataWizard){
+  var steps=SCAN_STEPS[tokoKode];if(!steps||stepIdx>=steps.length)return null;
+  var si=steps[stepIdx];var total=steps.length;var no=stepIdx+1;
+  var m='🤖 *INPUT LAPORAN*\n🏦 '+namaToko+'\n━━━━━━━━━━━━━━━━━━\n📊 *Step '+no+' dari '+total+'*\n[';
+  var prog=Math.floor((no/total)*10);for(var i=0;i<10;i++)m+=i<prog?'█':'░';
+  m+='] '+Math.round((no/total)*100)+'%\n━━━━━━━━━━━━━━━━━━\n\n';
   
-  let m = '📸 *SCAN FOTO LAPORAN*\n';
-  m += '🏦 ' + namaToko + '\n';
-  m += '━━━━━━━━━━━━━━━━━━\n';
-  m += '📊 *Foto ' + no + ' dari ' + totalSteps + '*\n';
-  const progress = Math.floor((no / totalSteps) * 10);
-  m += '[';
-  for (let i = 0; i < 10; i++) m += i < progress ? '█' : '░';
-  m += '] ' + Math.round((no / totalSteps) * 100) + '%\n';
-  m += '━━━━━━━━━━━━━━━━━━\n\n';
-  
-  if (stepInfo.scanField === 'manual') {
-    m += '🅿️ *' + stepInfo.label + '*\n\n';
-    m += '⌨️ Ketik nominal ' + stepInfo.label + ':\n';
-    m += '   (ketik angka atau *-* jika kosong)\n\n';
+  // Untuk multi-field: langsung masuk sub-field mode
+  if(si.scanField==='multi'){
+    var subIdx=dataWizard._subField||0;
+    var fn=si.fields[subIdx];
+    m+='📋 *'+si.label+'*\n\n';
+    m+='💰 Masukkan angka *'+fn.toUpperCase()+'*:\n';
+    m+='   (angka atau *-* jika kosong)\n\n';
+    m+='💡 Contoh: _40899000_\n\n';
+    // Progress sub-field
+    m+='📊 Sub-step: '+(subIdx+1)+'/'+si.fields.length+' ('+fn+')\n';
+  } else if(si.scanField==='manual'){
+    m+='🅿️ *'+si.label+'*\n\n⌨️ Ketik nominal:\n   (angka atau *-* jika kosong)\n\n';
   } else {
-    m += '📸 *Kirim foto untuk:*\n';
-    m += '🏷️ *' + stepInfo.label + '*\n\n';
-    
-    if (stepInfo.scanField === 'total_transaksi') {
-      m += '💡 Saya akan scan angka *Total Transaksi*\n   dari tabel iPos yang kamu kirim\n\n';
-    } else if (stepInfo.scanField === 'multi' || stepInfo.scanField === 'multi_promo') {
-      m += '💡 Saya akan scan beberapa data sekaligus:\n';
-      stepInfo.fields.forEach(function(f) {
-        m += '   • ' + f + '\n';
-      });
-      m += '\n';
-    }
-    
-    m += '📸 *Kirim foto sekarang*\n';
-    m += '⌨️ Atau ketik angka manual\n';
+    m+='💵 *'+si.label+'*\n\n⌨️ Ketik angka *Total Transaksi*:\n\n💡 Contoh: _15741500_\n\n';
   }
   
-  // Tampilkan progress data
-  const filled = Object.keys(dataWizard).filter(function(k) { return !k.startsWith('_') && dataWizard[k] !== undefined; });
-  if (filled.length > 0) {
-    m += '\n✅ *Data terisi: ' + filled.length + ' field*\n';
-  }
-  
-  m += '\n━━━━━━━━━━━━━━━━━━\n';
-  m += '🔙 *batal* | ⏭️ *skip* | 👁️ *review* | 💬 *selesai*';
+  var filled=Object.keys(dataWizard).filter(function(k){return!k.startsWith('_')&&dataWizard[k]!==undefined;});
+  if(filled.length>0)m+='✅ *Terisi: '+filled.length+' field*\n';
+  m+='\n━━━━━━━━━━━━━━━━━━\n🔙 *batal* | ⏭️ *skip* | 👁️ *review* | 💬 *selesai*';
   return m;
 }
 
@@ -1925,23 +1904,36 @@ app.post('/webhook', async function(req, res) {
           await kirimWA(sender, '❌ Gagal scan foto. Coba kirim ulang atau ketik angka manual.');
           return;
         }
-      } else if (msg) {
-        // MANUAL ANGKA
-        if (stepInfo.fields.length === 1) {
-          let nominal = 0;
-          if (msg === '-' || low === 'kosong') nominal = 0;
-          else {
-            const angka = msg.replace(/[^0-9]/g, '');
-            if (!angka) { await kirimWA(sender, '⚠️ Ketik angka saja atau kirim foto'); return; }
-            nominal = parseInt(angka);
-          }
-          hasilScan = {};
-          hasilScan[stepInfo.fields[0]] = nominal;
-        } else {
-          // Multi-field manual → parse format "field: angka"
-          hasilScan = parseScanMulti(msg, stepInfo.fields);
-        }
-      } else return;
+        } else if (msg) {
+    // MANUAL ANGKA
+    if (si.scanField==='manual'||si.scanField==='single'||si.fields.length===1) {
+      var nom=0;
+      if(msg==='-'||low==='kosong'||low==='0')nom=0;
+      else{var a=msg.replace(/[^0-9]/g,'');if(!a){await kirimWA(sender,'⚠️ Ketik angka atau *-*');return;}nom=parseInt(a);}
+      hasilScan={};
+      hasilScan[si.fields[0]]=nom;
+    } else if (si.scanField==='multi') {
+      // MULTI: input satu-satu
+      var subIdx2=sd._subField||0;
+      var fn2=si.fields[subIdx2];
+      var nom2=0;
+      if(msg==='-'||low==='kosong'||low==='0')nom2=0;
+      else{var a2=msg.replace(/[^0-9]/g,'');if(!a2){await kirimWA(sender,'⚠️ Ketik angka atau *-*');return;}nom2=parseInt(a2);}
+      sd[fn2]=nom2;
+      var fr3=nom2===0?'Rp. -':'Rp. '+nom2.toLocaleString('id-ID');
+      var nextSub2=subIdx2+1;
+      if(nextSub2<si.fields.length){
+        sd._subField=nextSub2;
+        updateSesi(sender,{scanData:sd});
+        await kirimWA(sender,'✅ _'+fn2+': '+fr3+'_\n\n💰 Masukkan angka *'+si.fields[nextSub2].toUpperCase()+'*:\n   (angka atau *-*)\n\n📊 Sub-step: '+(nextSub2+1)+'/'+si.fields.length);
+        return;
+      }
+      // Semua sub-field selesai
+      delete sd._subField;
+      hasilScan={};
+      si.fields.forEach(function(f){hasilScan[f]=sd[f]||0;});
+    }
+  }
       
       if (hasilScan) {
         // Simpan hasil
