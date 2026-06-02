@@ -2059,28 +2059,25 @@ app.post('/webhook', async function(req, res) {
       return;
     }
 
-    // ── INPUT DATA (menu 2 & 3 — foto/teks biasa) ──
-    const namaToko = s.menu === 3 ? 'Marketplace Perabot Mama' : NAMA_TOKO[s.toko];
-    let laporan = '';
-
-    if (image && image.length > 0) {
-      await kirimWA(sender, '📸 _Dianalisa AI..._');
-      try {
-        const prompt = buatPromptAI(s.menu, namaToko, getTanggal(s.kemarin), s.toko);
-        laporan = await analisaGambar(image, prompt);
-      } catch (e) { log.error('GEMINI', e.message); await kirimWA(sender, '❌ Gagal baca foto.'); return; }
-        } else if(msg){
-      var si=steps[ci];
-      if(si.scanField==='manual'||si.scanField==='single'){
-      if (s.menu === 2) laporan = genLapHarga(msg, namaToko, s.kemarin);
-      if (s.menu === 3) laporan = genLapMarket(msg, s.kemarin);
+        // ═══ INPUT DATA (menu 2 & 3 saja) ═══
+    var namaToko=s.menu===3?'Marketplace Perabot Mama':NAMA_TOKO[s.toko];
+    var laporan='';
+    if(image&&image.length>0){
+      await kirimWA(sender,'📸 _Dianalisa AI..._');
+      try{
+        var prompt=buatPromptAI(s.menu,namaToko,getTanggal(s.kemarin),s.toko);
+        laporan=await analisaGambar(image,prompt);
+      }catch(e){log.error('GEMINI',e.message);await kirimWA(sender,'❌ Gagal baca foto.');return;}
+    } else if(msg){
+      if(s.menu===2) laporan=genLapHarga(msg,namaToko,s.kemarin);
+      if(s.menu===3) laporan=genLapMarket(msg,s.kemarin);
     } else return;
 
-    if (laporan) {
-      await kirimWA(sender, laporan);
+    if(laporan){
+      await kirimWA(sender,laporan);
       resetSesi(sender);
       await tunggu(1500);
-      await kirimWA(sender, '✅ *Laporan selesai!* 😊\n\n' + getMenuUtama(sender));
+      await kirimWA(sender,'✅ *Laporan selesai!* 😊\n\n'+getMenuUtama(sender));
     }
 
   } catch (err) {
